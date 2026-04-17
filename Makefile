@@ -2,4 +2,4 @@
   .PHONY: run-backend
                         
   run-backend:
-	cd app/backend && go run ./cmd/api
+	cd backend && go run ./cmd/api
