@@ -1,0 +1,19 @@
+.logout-item {
+  --background: transparent;
+}
+
+ion-list {
+  margin-bottom: 1rem;
+}
+
+ion-list[inset] ion-item:first-child {
+  --border-radius: 10px 10px 0 0;
+}
+
+ion-list[inset] ion-item:last-child {
+  --border-radius: 0 0 10px 10px;
+}
+
+ion-list[inset] ion-item:only-child {
+  --border-radius: 10px;
+}

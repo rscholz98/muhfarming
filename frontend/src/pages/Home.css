@@ -1,0 +1,29 @@
+.stat-card {
+  text-align: center;
+  margin: 0;
+}
+
+.stat-icon {
+  font-size: 2rem;
+  color: var(--ion-color-primary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ion-color-primary);
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--ion-color-medium);
+  margin: 0;
+}
+
+.section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 1.5rem 0 1rem;
+  color: var(--ion-text-color);
+}

@@ -10,8 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ionic/react": "^8.8.4",
+    "@ionic/react-router": "^8.8.4",
+    "ionicons": "^8.0.13",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^5.3.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

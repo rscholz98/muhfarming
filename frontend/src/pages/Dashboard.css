@@ -1,0 +1,72 @@
+.weather-card {
+  background: linear-gradient(
+    135deg,
+    var(--ion-color-primary),
+    var(--ion-color-primary-shade)
+  );
+  color: white;
+}
+
+.weather-card ion-card-subtitle,
+.weather-card ion-card-title {
+  color: white;
+}
+
+.weather-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 2rem;
+}
+
+.weather-icon {
+  font-size: 2.5rem;
+}
+
+.weather-details {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.weather-card ion-chip {
+  --background: rgba(255, 255, 255, 0.2);
+  --color: white;
+}
+
+.progress-item {
+  margin-bottom: 1rem;
+}
+
+.progress-item:last-child {
+  margin-bottom: 0;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.quick-stats {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-number {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--ion-color-primary);
+}
+
+.stat-text {
+  font-size: 0.75rem;
+  color: var(--ion-color-medium);
+}
