@@ -19,13 +19,13 @@ resource "null_resource" "ecr_seed" {
   triggers = { repo = aws_ecr_repository.app.repository_url }
 
   provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
+    interpreter = ["cmd", "/c"]
     command     = <<EOT
-set -e
-aws ecr get-login-password --region ${local.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.app.repository_url}
-docker pull public.ecr.aws/lambda/provided:al2023
-docker tag public.ecr.aws/lambda/provided:al2023 ${aws_ecr_repository.app.repository_url}:latest
-docker push ${aws_ecr_repository.app.repository_url}:latest
+@echo off
+for /f "delims=" %%i in ('aws ecr get-login-password --region ${local.region}') do set "ECR_PWD=%%i"
+echo %ECR_PWD%| docker login --username AWS --password-stdin ${aws_ecr_repository.app.repository_url} || exit /b 1
+docker build -t ${aws_ecr_repository.app.repository_url}:latest "${path.module}/seed" || exit /b 1
+docker push ${aws_ecr_repository.app.repository_url}:latest || exit /b 1
 EOT
   }
 }
@@ -73,9 +73,8 @@ resource "aws_lambda_function" "app" {
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.app.repository_url}@${data.aws_ecr_image.latest.image_digest}"
 
-  memory_size                    = 512
-  timeout                        = 10
-  reserved_concurrent_executions = 2
+  memory_size = 512
+  timeout     = 10
 
   depends_on = [aws_cloudwatch_log_group.lambda]
 
