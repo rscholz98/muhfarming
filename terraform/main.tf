@@ -1,4 +1,4 @@
-locals {
+﻿locals {
   name   = "muhfarming"
   region = "eu-central-1"
 }
@@ -7,73 +7,7 @@ provider "aws" {
   region = local.region
 }
 
-# ---------- networking (default VPC) ----------
-
-data "aws_vpc" "default" {
-  default = true
-}
-
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  name = "com.amazonaws.global.cloudfront.origin-facing"
-}
-
-resource "random_password" "origin_secret" {
-  length  = 32
-  special = false
-}
-
-resource "aws_security_group" "alb" {
-  name        = "${local.name}-alb"
-  description = "Allow inbound HTTP from CloudFront only"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-alb" }
-}
-
-resource "aws_security_group" "fargate" {
-  name        = "${local.name}-fargate"
-  description = "Allow traffic from ALB only"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-fargate" }
-}
-
-# ---------- ECR ----------
+# ---------- ECR (Lambda container image) ----------
 
 resource "aws_ecr_repository" "app" {
   name                 = local.name
@@ -81,168 +15,89 @@ resource "aws_ecr_repository" "app" {
   force_delete         = true
 }
 
+resource "null_resource" "ecr_seed" {
+  triggers = { repo = aws_ecr_repository.app.repository_url }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<EOT
+set -e
+aws ecr get-login-password --region ${local.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.app.repository_url}
+docker pull public.ecr.aws/lambda/provided:al2023
+docker tag public.ecr.aws/lambda/provided:al2023 ${aws_ecr_repository.app.repository_url}:latest
+docker push ${aws_ecr_repository.app.repository_url}:latest
+EOT
+  }
+}
+
+data "aws_ecr_image" "latest" {
+  repository_name = aws_ecr_repository.app.name
+  image_tag       = "latest"
+  depends_on      = [null_resource.ecr_seed]
+}
+
 # ---------- IAM ----------
 
-data "aws_iam_policy_document" "ecs_assume" {
+data "aws_iam_policy_document" "lambda_assume" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
+      identifiers = ["lambda.amazonaws.com"]
     }
   }
 }
 
-resource "aws_iam_role" "task_exec" {
-  name               = "${local.name}-task-exec"
-  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+resource "aws_iam_role" "lambda" {
+  name               = "${local.name}-lambda"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
-resource "aws_iam_role_policy_attachment" "task_exec" {
-  role       = aws_iam_role.task_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# ---------- ECS cluster ----------
+# ---------- Logs ----------
 
-resource "aws_ecs_cluster" "main" {
-  name = local.name
-}
-
-# ---------- CloudWatch log group ----------
-
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${local.name}"
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${local.name}"
   retention_in_days = 7
 }
 
-# ---------- task definition ----------
+# ---------- Lambda ----------
 
-resource "aws_ecs_task_definition" "app" {
-  family                   = local.name
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = 256   # 0.25 vCPU  (smallest)
-  memory                   = 512   # 512 MB     (smallest for 256 CPU)
-  execution_role_arn       = aws_iam_role.task_exec.arn
+resource "aws_lambda_function" "app" {
+  function_name = local.name
+  role          = aws_iam_role.lambda.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.app.repository_url}@${data.aws_ecr_image.latest.image_digest}"
 
-  container_definitions = jsonencode([{
-    name      = local.name
-    image     = "${aws_ecr_repository.app.repository_url}:latest"
-    essential = true
-    portMappings = [{
-      containerPort = 8080
-      protocol      = "tcp"
-    }]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.app.name
-        "awslogs-region"        = local.region
-        "awslogs-stream-prefix" = "ecs"
-      }
-    }
-  }])
-}
+  memory_size                    = 512
+  timeout                        = 10
+  reserved_concurrent_executions = 2
 
-# ---------- ALB ----------
+  depends_on = [aws_cloudwatch_log_group.lambda]
 
-resource "aws_lb" "app" {
-  name               = local.name
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.default.ids
-
-  tags = { Name = local.name }
-}
-
-resource "aws_lb_target_group" "app" {
-  name        = local.name
-  port        = 8080
-  protocol    = "HTTP"
-  vpc_id      = data.aws_vpc.default.id
-  target_type = "ip"
-
-  health_check {
-    path                = "/health"
-    port                = "traffic-port"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
+  lifecycle {
+    ignore_changes = [image_uri]
   }
 }
 
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.app.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  # Reject requests that don't have the correct origin header
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Forbidden"
-      status_code  = "403"
-    }
-  }
+resource "aws_lambda_function_url" "app" {
+  function_name      = aws_lambda_function.app.function_name
+  authorization_type = "NONE"
 }
 
-resource "aws_lb_listener_rule" "verify_origin" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 1
-
-  condition {
-    http_header {
-      http_header_name = "X-Origin-Verify"
-      values           = [random_password.origin_secret.result]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
-  }
-}
-
-# ---------- ECS service ----------
-
-resource "aws_ecs_service" "app" {
-  name            = local.name
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = data.aws_subnets.default.ids
-    security_groups  = [aws_security_group.fargate.id]
-    assign_public_ip = true
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.app.arn
-    container_name   = local.name
-    container_port   = 8080
-  }
-
-  depends_on = [aws_lb_listener.http]
-}
-
-# ---------- S3 bucket for frontend ----------
+# ---------- S3 frontend ----------
 
 resource "aws_s3_bucket" "frontend" {
   bucket        = "${local.name}-frontend"
   force_destroy = true
-
-  tags = { Name = "${local.name}-frontend" }
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-
+  bucket                  = aws_s3_bucket.frontend.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -260,9 +115,7 @@ resource "aws_s3_bucket_policy" "frontend" {
       Action    = "s3:GetObject"
       Resource  = "${aws_s3_bucket.frontend.arn}/*"
       Condition = {
-        StringEquals = {
-          "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
-        }
+        StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.main.arn }
       }
     }]
   })
@@ -277,38 +130,34 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+locals {
+  lambda_url_host = replace(replace(aws_lambda_function_url.app.function_url, "https://", ""), "/", "")
+}
+
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
   comment             = "${local.name} distribution"
 
-  # S3 origin for frontend
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
-  # ALB origin for backend API
   origin {
-    domain_name = aws_lb.app.dns_name
-    origin_id   = "alb-backend"
+    domain_name = local.lambda_url_host
+    origin_id   = "lambda-backend"
 
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only"
+      origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
-    }
-
-    custom_header {
-      name  = "X-Origin-Verify"
-      value = random_password.origin_secret.result
     }
   }
 
-  # Default behavior: serve frontend from S3
   default_cache_behavior {
     target_origin_id       = "s3-frontend"
     viewer_protocol_policy = "redirect-to-https"
@@ -317,9 +166,7 @@ resource "aws_cloudfront_distribution" "main" {
 
     forwarded_values {
       query_string = false
-      cookies {
-        forward = "none"
-      }
+      cookies { forward = "none" }
     }
 
     min_ttl     = 0
@@ -327,20 +174,17 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 86400
   }
 
-  # /api/* routes to ALB backend
   ordered_cache_behavior {
     path_pattern           = "/api/*"
-    target_origin_id       = "alb-backend"
+    target_origin_id       = "lambda-backend"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = true
-      headers      = ["Authorization", "Origin", "Accept", "Content-Type"]
-      cookies {
-        forward = "all"
-      }
+      headers      = ["Origin", "Accept", "Content-Type"]
+      cookies { forward = "none" }
     }
 
     min_ttl     = 0
@@ -348,19 +192,16 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 0
   }
 
-  # /health endpoint for backend health checks
   ordered_cache_behavior {
     path_pattern           = "/health"
-    target_origin_id       = "alb-backend"
+    target_origin_id       = "lambda-backend"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
 
     forwarded_values {
       query_string = false
-      cookies {
-        forward = "none"
-      }
+      cookies { forward = "none" }
     }
 
     min_ttl     = 0
@@ -368,7 +209,6 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 0
   }
 
-  # SPA fallback for client-side routing
   custom_error_response {
     error_code         = 403
     response_code      = 200
@@ -382,14 +222,10 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
+    geo_restriction { restriction_type = "none" }
   }
 
   viewer_certificate {
     cloudfront_default_certificate = true
   }
-
-  tags = { Name = local.name }
 }
