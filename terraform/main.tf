@@ -96,6 +96,13 @@ resource "aws_lambda_permission" "url_public" {
   function_url_auth_type = "NONE"
 }
 
+resource "aws_lambda_permission" "url_invoke" {
+  statement_id  = "AllowPublicInvokeViaFunctionUrl"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.app.function_name
+  principal     = "*"
+}
+
 # ---------- S3 frontend ----------
 
 resource "aws_s3_bucket" "frontend" {
