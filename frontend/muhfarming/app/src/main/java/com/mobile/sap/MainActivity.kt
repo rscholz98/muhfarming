@@ -11,7 +11,14 @@ import com.mobile.sap.ui.theme.MuhfarmingTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+
+        // Workaround for Compose hover event crash on some devices
+        try {
+            enableEdgeToEdge()
+        } catch (e: IllegalStateException) {
+            // Silently continue if edge-to-edge fails
+        }
+
         setContent {
             MuhfarmingTheme {
                 AppNavigation()
