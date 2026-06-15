@@ -19,3 +19,26 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Compose specific rules
+-keep class androidx.compose.ui.platform.AndroidComposeView { *; }
+-keep class androidx.compose.ui.** { *; }
+-dontwarn androidx.compose.ui.**
+
+# Retrofit and OkHttp
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class retrofit2.** { *; }
+-keep class okhttp3.** { *; }
+
+# Gson
+-keepattributes Signature
+-keep class com.google.gson.** { *; }
+-keep class com.mobile.sap.data.model.** { *; }
+
+# Kotlin Coroutines
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
