@@ -2,10 +2,14 @@
 
 A mixed farming management application.
 
+## Demo
+
+Easily download the app [here](https://github.com/rscholz98/muhfarming/releases/download/1.0/muh-android.apk)
+
 ## Tech Stack
 
 - **Backend:** Go
-- **Frontend:** TBD
+- **Frontend:** Android Studio - Kotlin
 - **Infrastructure:** Terraform
 
 ## Project Structure
