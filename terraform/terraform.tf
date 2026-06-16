@@ -4,10 +4,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.92"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
   }
 
   required_version = ">= 1.2"
