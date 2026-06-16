@@ -2,36 +2,38 @@ package main
 
 import (
 	"log"
-	"muhfarming/internal/handlers"
+	"muhfarming/internal/db"
 	"net/http"
 )
 
 func main() {
-	log.Println("Server is starting.")
-	startServer()
+	if err := startServer(); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
 
 func startServer() error {
-	h := handlers.New()
-	mux := setUpRoutes(h)
+	gormDB, err := db.Connect()
+	if err != nil {
+		return err
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return err
+	}
+	defer sqlDB.Close()
+
+	mux, err := setUpRoutes(gormDB)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
 	}
 
-	srvErr := srv.ListenAndServe()
-	if srvErr != nil {
-		log.Fatal("Listen and Serve failed during start up: %w", srvErr)
-	}
-	return nil
-}
-
-func setUpRoutes(h *handlers.Handler) http.Handler {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /health", h.Health)
-	mux.HandleFunc("GET /forecast", h.Forecast)
-
-	return mux
+	log.Println("Server is ready.")
+	return srv.ListenAndServe()
 }
