@@ -4,11 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,9 +34,14 @@ import com.mobile.sap.ui.viewmodel.PestViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PestManagementScreen(
-    viewModel: PestViewModel = viewModel()
+    viewModel: PestViewModel = viewModel(),
+    isAdmin: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showAddPestDialog by remember { mutableStateOf(false) }
+    var pestToEdit by remember { mutableStateOf<PestInfo?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var pestToDelete by remember { mutableStateOf<PestInfo?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -46,6 +61,20 @@ fun PestManagementScreen(
                 )
             )
         },
+        floatingActionButton = {
+            if (isAdmin) {
+                FloatingActionButton(
+                    onClick = { showAddPestDialog = true },
+                    containerColor = FioriBlue,
+                    contentColor = FioriWhite
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Pest"
+                    )
+                }
+            }
+        },
         containerColor = FioriLightGray
     ) { paddingValues ->
         when (val state = uiState) {
@@ -62,6 +91,15 @@ fun PestManagementScreen(
             is PestUiState.Success -> {
                 PestListContent(
                     pests = state.pests,
+                    isAdmin = isAdmin,
+                    onEditPest = { pest ->
+                        pestToEdit = pest
+                        showAddPestDialog = true
+                    },
+                    onDeletePest = { pest ->
+                        pestToDelete = pest
+                        showDeleteConfirmation = true
+                    },
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -73,12 +111,87 @@ fun PestManagementScreen(
                 )
             }
         }
+
+        // Add/Edit Pest Dialog
+        if (showAddPestDialog) {
+            AddPestDialog(
+                existingPest = pestToEdit,
+                onDismiss = {
+                    showAddPestDialog = false
+                    pestToEdit = null
+                },
+                onAddPest = { newPest, originalName ->
+                    if (pestToEdit != null) {
+                        // Update existing pest
+                        viewModel.updatePest(newPest, originalName ?: "")
+                    } else {
+                        // Add new pest
+                        viewModel.addPest(newPest)
+                    }
+                    showAddPestDialog = false
+                    pestToEdit = null
+                }
+            )
+        }
+
+        // Delete Confirmation Dialog
+        if (showDeleteConfirmation && pestToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDeleteConfirmation = false
+                    pestToDelete = null
+                },
+                title = {
+                    Text(
+                        text = "Delete Pest",
+                        fontWeight = FontWeight.Bold,
+                        color = FioriBlack
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete ${pestToDelete?.pestName}? This action cannot be undone.",
+                        color = FioriDarkGray
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            pestToDelete?.let { pest ->
+                                viewModel.deletePest(pest.pestName)
+                            }
+                            showDeleteConfirmation = false
+                            pestToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = FioriError,
+                            contentColor = FioriWhite
+                        )
+                    ) {
+                        Text("Delete", fontWeight = FontWeight.Medium)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showDeleteConfirmation = false
+                        pestToDelete = null
+                    }) {
+                        Text("Cancel", color = FioriDarkGray, fontWeight = FontWeight.Medium)
+                    }
+                },
+                containerColor = FioriWhite,
+                shape = RoundedCornerShape(20.dp)
+            )
+        }
     }
 }
 
 @Composable
 fun PestListContent(
     pests: List<PestInfo>,
+    isAdmin: Boolean,
+    onEditPest: (PestInfo) -> Unit,
+    onDeletePest: (PestInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -96,7 +209,12 @@ fun PestListContent(
         }
 
         items(pests) { pest ->
-            PestInfoCard(pest)
+            PestInfoCard(
+                pest = pest,
+                isAdmin = isAdmin,
+                onEditClick = { onEditPest(pest) },
+                onDeleteClick = { onDeletePest(pest) }
+            )
         }
 
         item {
@@ -146,7 +264,12 @@ fun InfoCard() {
 }
 
 @Composable
-fun PestInfoCard(pest: PestInfo) {
+fun PestInfoCard(
+    pest: PestInfo,
+    isAdmin: Boolean,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -172,7 +295,36 @@ fun PestInfoCard(pest: PestInfo) {
                     letterSpacing = 0.sp,
                     modifier = Modifier.weight(1f)
                 )
-                SeverityBadge(severity = pest.severity)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SeverityBadge(severity = pest.severity)
+                    if (isAdmin) {
+                        IconButton(
+                            onClick = onEditClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Pest",
+                                tint = FioriBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Pest",
+                                tint = FioriError,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -277,6 +429,211 @@ fun ErrorStateWithRetry(
                     color = FioriWhite,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddPestDialog(
+    existingPest: PestInfo? = null,
+    onDismiss: () -> Unit,
+    onAddPest: (PestInfo, String?) -> Unit
+) {
+    val isEditing = existingPest != null
+    val originalName = existingPest?.pestName
+    var pestName by remember { mutableStateOf(existingPest?.pestName ?: "") }
+    var pestDescription by remember { mutableStateOf(existingPest?.pestDescription ?: "") }
+    var season by remember { mutableStateOf(existingPest?.season ?: "") }
+    var severity by remember { mutableStateOf(existingPest?.severity ?: "LOW") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(0.95f)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .heightIn(max = 600.dp),
+            colors = CardDefaults.cardColors(containerColor = FioriWhite),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isEditing) "Edit Pest Information" else "Add Pest Information",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = FioriBlack
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = FioriDarkGray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Pest Name
+                OutlinedTextField(
+                    value = pestName,
+                    onValueChange = { pestName = it; errorMessage = null },
+                    label = { Text("Pest Name *", color = FioriDarkGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = FioriBlue,
+                        focusedLabelColor = FioriBlue,
+                        unfocusedBorderColor = FioriGray,
+                        unfocusedLabelColor = FioriDarkGray,
+                        focusedTextColor = FioriBlack,
+                        unfocusedTextColor = FioriBlack
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Pest Description
+                OutlinedTextField(
+                    value = pestDescription,
+                    onValueChange = { pestDescription = it; errorMessage = null },
+                    label = { Text("Description *", color = FioriDarkGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = FioriBlue,
+                        focusedLabelColor = FioriBlue,
+                        unfocusedBorderColor = FioriGray,
+                        unfocusedLabelColor = FioriDarkGray,
+                        focusedTextColor = FioriBlack,
+                        unfocusedTextColor = FioriBlack
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Season
+                OutlinedTextField(
+                    value = season,
+                    onValueChange = { season = it; errorMessage = null },
+                    label = { Text("Season *", color = FioriDarkGray) },
+                    placeholder = { Text("e.g., Rainy Season, Dry Season", color = FioriGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = FioriBlue,
+                        focusedLabelColor = FioriBlue,
+                        unfocusedBorderColor = FioriGray,
+                        unfocusedLabelColor = FioriDarkGray,
+                        focusedTextColor = FioriBlack,
+                        unfocusedTextColor = FioriBlack
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Severity Dropdown
+                var expandedSeverity by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expandedSeverity,
+                    onExpandedChange = { expandedSeverity = it }
+                ) {
+                    OutlinedTextField(
+                        value = severity,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Severity *", color = FioriDarkGray) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSeverity) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = FioriBlue,
+                            focusedLabelColor = FioriBlue,
+                            unfocusedBorderColor = FioriGray,
+                            unfocusedLabelColor = FioriDarkGray,
+                            focusedTextColor = FioriBlack,
+                            unfocusedTextColor = FioriBlack,
+                            disabledTextColor = FioriBlack
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedSeverity,
+                        onDismissRequest = { expandedSeverity = false }
+                    ) {
+                        listOf("LOW", "MEDIUM", "HIGH").forEach { sev ->
+                            DropdownMenuItem(
+                                text = { Text(sev, color = FioriBlack) },
+                                onClick = {
+                                    severity = sev
+                                    expandedSeverity = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage!!,
+                        color = FioriError,
+                        fontSize = 12.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = FioriDarkGray, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            // Validate required fields
+                            if (pestName.isBlank() || pestDescription.isBlank() || season.isBlank()) {
+                                errorMessage = "Please fill all required fields"
+                                return@Button
+                            }
+
+                            // Create pest info object
+                            val newPest = PestInfo(
+                                pestName = pestName,
+                                pestDescription = pestDescription,
+                                season = season,
+                                severity = severity
+                            )
+
+                            onAddPest(newPest, originalName)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = FioriBlue,
+                            contentColor = FioriWhite
+                        )
+                    ) {
+                        Text(if (isEditing) "Save Changes" else "Add Pest", fontWeight = FontWeight.Medium)
+                    }
+                }
             }
         }
     }
