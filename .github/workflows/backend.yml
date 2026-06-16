@@ -1,4 +1,4 @@
-﻿name: Backend Deploy
+name: Backend Deploy
 
 on:
   push:
@@ -10,7 +10,6 @@ on:
 env:
   AWS_REGION: eu-central-1
   ECR_REPOSITORY: muhfarming
-  LAMBDA_FUNCTION: muhfarming
 
 jobs:
   build-and-deploy:
@@ -41,14 +40,25 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Update Lambda function
+      - name: Deploy to EC2 via SSM
         env:
-          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          aws lambda update-function-code \
-            --function-name ${{ env.LAMBDA_FUNCTION }} \
-            --image-uri "$IMAGE_URI"
-          aws lambda wait function-updated \
-            --function-name ${{ env.LAMBDA_FUNCTION }}
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=muhfarming" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands="[
+              \"aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY\",
+              \"docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\",
+              \"docker stop muhfarming || true\",
+              \"docker rm muhfarming || true\",
+              \"docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\"
+            ]" \
+            --wait
