@@ -12,46 +12,42 @@ type Location struct {
 	Latitude  float32
 }
 
-// IPAPIResponse represents the minimal response we need from ip-api.com
-type IPAPIResponse struct {
+type ipAPIResponse struct {
 	Status string  `json:"status"`
 	Lat    float32 `json:"lat"`
 	Lon    float32 `json:"lon"`
 }
 
-func GetLocation(ip string) (*Location, error) {
+func Lookup(ip string) (*Location, error) {
 	url := "http://ip-api.com/json/" + ip
 
-	req, reqErr := http.NewRequest("GET", url, nil)
-	if reqErr != nil {
-		return nil, fmt.Errorf("request creation failed: %w", reqErr)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
 
-	resp, respErr := http.DefaultClient.Do(req)
-	if respErr != nil {
-		return nil, fmt.Errorf("request failed: %w", respErr)
+	resp, err := Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", readErr)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
-	var apiResponse IPAPIResponse
+	var apiResponse ipAPIResponse
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
+		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
 	if apiResponse.Status != "success" {
-		return nil, fmt.Errorf("IP API returned status: %s", apiResponse.Status)
+		return nil, fmt.Errorf("ip-api returned status: %s", apiResponse.Status)
 	}
 
-	// Extract only lat and lon to Location
-	location := &Location{
+	return &Location{
 		Latitude:  apiResponse.Lat,
 		Longitude: apiResponse.Lon,
-	}
-
-	return location, nil
+	}, nil
 }

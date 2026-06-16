@@ -15,3 +15,4 @@ override.tf.json
 .terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
+backend/muhfarming.db
