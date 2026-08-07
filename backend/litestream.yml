@@ -1,0 +1,9 @@
+# Litestream continuously replicates the SQLite WAL to S3 so the database
+# survives container recreation (every deploy does docker rm) and instance
+# loss. Credentials are omitted intentionally: Litestream falls back to the
+# EC2 instance IAM role, which is granted access to this bucket in Terraform.
+dbs:
+  - path: /data/muhfarming.db
+    replica:
+      url: s3://muhfarming-data/db
+      region: eu-central-1

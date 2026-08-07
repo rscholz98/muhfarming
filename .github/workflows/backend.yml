@@ -58,7 +58,8 @@ jobs:
               "docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG",
               "docker stop muhfarming || true",
               "docker rm muhfarming || true",
-              "docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+              "mkdir -p /opt/muhfarming/data",
+              "docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 -v /opt/muhfarming/data:/data $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
             ]
           }
           EOF

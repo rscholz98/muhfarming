@@ -18,6 +18,15 @@ resource "aws_s3_bucket" "main" {
   }
 }
 
+# Block all public access to the data bucket (it holds the DB replica).
+resource "aws_s3_bucket_public_access_block" "main" {
+  bucket                  = aws_s3_bucket.main.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # IAM role for EC2 (SSM access + ECR pull)
 data "aws_iam_policy_document" "ec2_assume" {
   statement {
@@ -42,6 +51,29 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm" {
 resource "aws_iam_role_policy_attachment" "ec2_ecr" {
   role       = aws_iam_role.ec2.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+# Allow the instance (via Litestream) to replicate/restore the SQLite DB
+# to the data bucket. Scoped to the muhfarming-data bucket only.
+data "aws_iam_policy_document" "ec2_s3" {
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.main.arn]
+  }
+  statement {
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${aws_s3_bucket.main.arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ec2_s3" {
+  name   = "${local.name}-ec2-s3"
+  role   = aws_iam_role.ec2.id
+  policy = data.aws_iam_policy_document.ec2_s3.json
 }
 
 resource "aws_iam_instance_profile" "ec2" {
@@ -117,5 +149,13 @@ resource "aws_instance" "main" {
   tags = {
     Name    = local.name
     Project = local.name
+  }
+
+  # The AMI data source uses most_recent, so a newly published AL2023 image
+  # would otherwise force instance replacement (destroying local state and
+  # changing the public IP). Pin to the AMI the instance already runs; bump
+  # deliberately by removing this and applying when a rebuild is intended.
+  lifecycle {
+    ignore_changes = [ami]
   }
 }
