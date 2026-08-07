@@ -55,7 +55,7 @@ func (s *Store) Create(ctx context.Context, req CreateUserRequest) (*User, error
 	if err := s.db.WithContext(ctx).Create(&u).Error; err != nil {
 		return nil, fmt.Errorf("create user failed: %w", err)
 	}
-	return &u, nil
+	return s.GetByID(ctx, int64(u.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateUserRequest) (*User, error) {
@@ -73,7 +73,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateUserRequest) (*U
 	if err := s.db.WithContext(ctx).Save(&u).Error; err != nil {
 		return nil, fmt.Errorf("update user failed: %w", err)
 	}
-	return &u, nil
+	return s.GetByID(ctx, int64(u.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

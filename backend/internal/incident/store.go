@@ -53,7 +53,7 @@ func (s *Store) Create(ctx context.Context, req CreateIncidentRequest) (*Inciden
 	if err := s.db.WithContext(ctx).Create(&i).Error; err != nil {
 		return nil, fmt.Errorf("create incident failed: %w", err)
 	}
-	return &i, nil
+	return s.GetByID(ctx, int64(i.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateIncidentRequest) (*Incident, error) {
@@ -69,7 +69,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateIncidentRequest)
 	if err := s.db.WithContext(ctx).Save(&i).Error; err != nil {
 		return nil, fmt.Errorf("update incident failed: %w", err)
 	}
-	return &i, nil
+	return s.GetByID(ctx, int64(i.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

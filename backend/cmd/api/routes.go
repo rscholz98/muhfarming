@@ -6,6 +6,7 @@ import (
 	"muhfarming/internal/cultivation"
 	"muhfarming/internal/cultivationguideline"
 	"muhfarming/internal/cultivationrisk"
+	"muhfarming/internal/docs"
 	"muhfarming/internal/farm"
 	"muhfarming/internal/fertilizer"
 	"muhfarming/internal/field"
@@ -24,6 +25,10 @@ func setUpRoutes(db *gorm.DB) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", health)
+
+	docsHandler := docs.NewHandler()
+	mux.HandleFunc("GET /", docsHandler.UI)
+	mux.HandleFunc("GET /openapi.yaml", docsHandler.Spec)
 
 	weatherHandler := weather.NewHandler()
 	mux.HandleFunc("GET /forecast", weatherHandler.Forecast)

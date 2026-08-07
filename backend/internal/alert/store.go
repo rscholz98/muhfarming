@@ -50,7 +50,7 @@ func (s *Store) Create(ctx context.Context, req CreateAlertRequest) (*Alert, err
 	if err := s.db.WithContext(ctx).Create(&a).Error; err != nil {
 		return nil, fmt.Errorf("create alert failed: %w", err)
 	}
-	return &a, nil
+	return s.GetByID(ctx, int64(a.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateAlertRequest) (*Alert, error) {
@@ -63,7 +63,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateAlertRequest) (*
 	if err := s.db.WithContext(ctx).Save(&a).Error; err != nil {
 		return nil, fmt.Errorf("update alert failed: %w", err)
 	}
-	return &a, nil
+	return s.GetByID(ctx, int64(a.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

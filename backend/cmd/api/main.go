@@ -12,6 +12,8 @@ func main() {
 	}
 }
 
+const addr = ":8080"
+
 func startServer() error {
 	gormDB, err := db.Connect()
 	if err != nil {
@@ -30,10 +32,11 @@ func startServer() error {
 	}
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    addr,
 		Handler: mux,
 	}
 
-	log.Println("Server is ready.")
+	log.Printf("Server listening on port '%s'.", addr)
+	log.Printf("Call root path for accessing Swagger UI.")
 	return srv.ListenAndServe()
 }

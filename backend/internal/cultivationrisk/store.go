@@ -53,7 +53,7 @@ func (s *Store) Create(ctx context.Context, req CreateCultivationRiskRequest) (*
 	if err := s.db.WithContext(ctx).Create(&cr).Error; err != nil {
 		return nil, fmt.Errorf("create cultivationrisk failed: %w", err)
 	}
-	return &cr, nil
+	return s.GetByID(ctx, int64(cr.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRiskRequest) (*CultivationRisk, error) {
@@ -69,7 +69,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRiskR
 	if err := s.db.WithContext(ctx).Save(&cr).Error; err != nil {
 		return nil, fmt.Errorf("update cultivationrisk failed: %w", err)
 	}
-	return &cr, nil
+	return s.GetByID(ctx, int64(cr.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

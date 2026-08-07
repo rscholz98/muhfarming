@@ -1,0 +1,1230 @@
+openapi: 3.1.0
+info:
+  title: Muhfarming API
+  version: 1.0.0
+  description: |
+    REST API for the Muhfarming backend. Provides CRUD operations for all
+    domain entities (farms, regions, fields, crops, cultivations, and related
+    records), plus a health check and a weather forecast proxy.
+
+    ## Conventions
+    - All persisted entities embed common fields from the ORM base model:
+      `ID`, `CreatedAt`, `UpdatedAt`, `DeletedAt` (note the capitalized keys;
+      entity-specific fields use camelCase).
+    - Foreign keys are exposed both as an id field (e.g. `farmId`) and, on
+      read/create/update responses, as a nested association object
+      (e.g. `farm`).
+    - **Soft deletes:** `DELETE` returns `204 No Content`. The row is not
+      physically removed — its `DeletedAt` is set and it is excluded from all
+      subsequent reads (a later `GET` of that id returns `404`).
+    - Validation failures return `400` with a structured body listing the
+      offending fields.
+
+servers:
+  - url: /
+    description: The server that served this page. "Try it out" sends requests to the same host/port you loaded /docs from (e.g. http://localhost:8080 locally, or the deployed host). The API listens on port 8080 on all interfaces.
+
+tags:
+  - name: Farms
+  - name: Regions
+  - name: Cultivations
+  - name: Fertilizers
+  - name: Hazards
+  - name: Fields
+  - name: Field Coordinates
+  - name: Crops
+  - name: Cultivation Guidelines
+  - name: Cultivation Risks
+  - name: Incidents
+  - name: Alerts
+  - name: Users
+  - name: System
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /forecast:
+    get:
+      tags: [System]
+      summary: Weather forecast for a location derived from an IP address
+      operationId: getForecast
+      parameters:
+        - name: ip
+          in: query
+          required: true
+          description: IPv4/IPv6 address to geolocate
+          schema:
+            type: string
+            format: ip
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-08-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-08-07"
+      responses:
+        "200":
+          description: Forecast data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForecastResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /farms:
+    get:
+      tags: [Farms]
+      summary: List farms
+      operationId: listFarms
+      responses:
+        "200":
+          description: Array of farms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Farm" }
+    post:
+      tags: [Farms]
+      summary: Create a farm
+      operationId: createFarm
+      requestBody:
+        $ref: "#/components/requestBodies/FarmBody"
+      responses:
+        "201":
+          $ref: "#/components/responses/FarmResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+  /farms/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Farms]
+      summary: Get a farm by id
+      operationId: getFarm
+      responses:
+        "200":
+          $ref: "#/components/responses/FarmResponse"
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Farms]
+      summary: Update a farm
+      operationId: updateFarm
+      requestBody:
+        $ref: "#/components/requestBodies/FarmBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/FarmResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Farms]
+      summary: Delete a farm (soft delete)
+      operationId: deleteFarm
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /regions:
+    get:
+      tags: [Regions]
+      summary: List regions
+      operationId: listRegions
+      responses:
+        "200":
+          description: Array of regions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Region" }
+    post:
+      tags: [Regions]
+      summary: Create a region
+      operationId: createRegion
+      requestBody: { $ref: "#/components/requestBodies/RegionBody" }
+      responses:
+        "201": { $ref: "#/components/responses/RegionResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /regions/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Regions]
+      summary: Get a region by id
+      operationId: getRegion
+      responses:
+        "200": { $ref: "#/components/responses/RegionResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Regions]
+      summary: Update a region
+      operationId: updateRegion
+      requestBody: { $ref: "#/components/requestBodies/RegionBody" }
+      responses:
+        "200": { $ref: "#/components/responses/RegionResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Regions]
+      summary: Delete a region (soft delete)
+      operationId: deleteRegion
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /cultivations:
+    get:
+      tags: [Cultivations]
+      summary: List cultivations
+      operationId: listCultivations
+      responses:
+        "200":
+          description: Array of cultivations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Cultivation" }
+    post:
+      tags: [Cultivations]
+      summary: Create a cultivation
+      operationId: createCultivation
+      requestBody: { $ref: "#/components/requestBodies/CultivationBody" }
+      responses:
+        "201": { $ref: "#/components/responses/CultivationResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /cultivations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Cultivations]
+      summary: Get a cultivation by id
+      operationId: getCultivation
+      responses:
+        "200": { $ref: "#/components/responses/CultivationResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Cultivations]
+      summary: Update a cultivation
+      operationId: updateCultivation
+      requestBody: { $ref: "#/components/requestBodies/CultivationBody" }
+      responses:
+        "200": { $ref: "#/components/responses/CultivationResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Cultivations]
+      summary: Delete a cultivation (soft delete)
+      operationId: deleteCultivation
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /fertilizers:
+    get:
+      tags: [Fertilizers]
+      summary: List fertilizers
+      operationId: listFertilizers
+      responses:
+        "200":
+          description: Array of fertilizers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Fertilizer" }
+    post:
+      tags: [Fertilizers]
+      summary: Create a fertilizer
+      operationId: createFertilizer
+      requestBody: { $ref: "#/components/requestBodies/FertilizerBody" }
+      responses:
+        "201": { $ref: "#/components/responses/FertilizerResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /fertilizers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Fertilizers]
+      summary: Get a fertilizer by id
+      operationId: getFertilizer
+      responses:
+        "200": { $ref: "#/components/responses/FertilizerResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Fertilizers]
+      summary: Update a fertilizer
+      operationId: updateFertilizer
+      requestBody: { $ref: "#/components/requestBodies/FertilizerBody" }
+      responses:
+        "200": { $ref: "#/components/responses/FertilizerResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Fertilizers]
+      summary: Delete a fertilizer (soft delete)
+      operationId: deleteFertilizer
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /hazards:
+    get:
+      tags: [Hazards]
+      summary: List hazards
+      operationId: listHazards
+      responses:
+        "200":
+          description: Array of hazards
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Hazard" }
+    post:
+      tags: [Hazards]
+      summary: Create a hazard
+      operationId: createHazard
+      requestBody: { $ref: "#/components/requestBodies/HazardBody" }
+      responses:
+        "201": { $ref: "#/components/responses/HazardResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /hazards/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Hazards]
+      summary: Get a hazard by id
+      operationId: getHazard
+      responses:
+        "200": { $ref: "#/components/responses/HazardResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Hazards]
+      summary: Update a hazard
+      operationId: updateHazard
+      requestBody: { $ref: "#/components/requestBodies/HazardBody" }
+      responses:
+        "200": { $ref: "#/components/responses/HazardResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Hazards]
+      summary: Delete a hazard (soft delete)
+      operationId: deleteHazard
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /fields:
+    get:
+      tags: [Fields]
+      summary: List fields
+      operationId: listFields
+      responses:
+        "200":
+          description: Array of fields
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Field" }
+    post:
+      tags: [Fields]
+      summary: Create a field
+      operationId: createField
+      requestBody: { $ref: "#/components/requestBodies/FieldBody" }
+      responses:
+        "201": { $ref: "#/components/responses/FieldResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /fields/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Fields]
+      summary: Get a field by id
+      operationId: getField
+      responses:
+        "200": { $ref: "#/components/responses/FieldResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Fields]
+      summary: Update a field
+      operationId: updateField
+      requestBody: { $ref: "#/components/requestBodies/FieldBody" }
+      responses:
+        "200": { $ref: "#/components/responses/FieldResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Fields]
+      summary: Delete a field (soft delete)
+      operationId: deleteField
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /field-coordinates:
+    get:
+      tags: [Field Coordinates]
+      summary: List field coordinates
+      operationId: listFieldCoordinates
+      responses:
+        "200":
+          description: Array of field coordinates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FieldCoordinate" }
+    post:
+      tags: [Field Coordinates]
+      summary: Create a field coordinate
+      operationId: createFieldCoordinate
+      requestBody: { $ref: "#/components/requestBodies/FieldCoordinateBody" }
+      responses:
+        "201": { $ref: "#/components/responses/FieldCoordinateResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /field-coordinates/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Field Coordinates]
+      summary: Get a field coordinate by id
+      operationId: getFieldCoordinate
+      responses:
+        "200": { $ref: "#/components/responses/FieldCoordinateResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Field Coordinates]
+      summary: Update a field coordinate
+      operationId: updateFieldCoordinate
+      requestBody: { $ref: "#/components/requestBodies/FieldCoordinateBody" }
+      responses:
+        "200": { $ref: "#/components/responses/FieldCoordinateResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Field Coordinates]
+      summary: Delete a field coordinate (soft delete)
+      operationId: deleteFieldCoordinate
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /crops:
+    get:
+      tags: [Crops]
+      summary: List crops
+      operationId: listCrops
+      responses:
+        "200":
+          description: Array of crops
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Crop" }
+    post:
+      tags: [Crops]
+      summary: Create a crop
+      operationId: createCrop
+      requestBody: { $ref: "#/components/requestBodies/CropBody" }
+      responses:
+        "201": { $ref: "#/components/responses/CropResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /crops/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Crops]
+      summary: Get a crop by id
+      operationId: getCrop
+      responses:
+        "200": { $ref: "#/components/responses/CropResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Crops]
+      summary: Update a crop
+      operationId: updateCrop
+      requestBody: { $ref: "#/components/requestBodies/CropBody" }
+      responses:
+        "200": { $ref: "#/components/responses/CropResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Crops]
+      summary: Delete a crop (soft delete)
+      operationId: deleteCrop
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /cultivation-guidelines:
+    get:
+      tags: [Cultivation Guidelines]
+      summary: List cultivation guidelines
+      operationId: listCultivationGuidelines
+      responses:
+        "200":
+          description: Array of cultivation guidelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CultivationGuideline" }
+    post:
+      tags: [Cultivation Guidelines]
+      summary: Create a cultivation guideline
+      operationId: createCultivationGuideline
+      requestBody: { $ref: "#/components/requestBodies/CultivationGuidelineBody" }
+      responses:
+        "201": { $ref: "#/components/responses/CultivationGuidelineResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /cultivation-guidelines/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Cultivation Guidelines]
+      summary: Get a cultivation guideline by id
+      operationId: getCultivationGuideline
+      responses:
+        "200": { $ref: "#/components/responses/CultivationGuidelineResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Cultivation Guidelines]
+      summary: Update a cultivation guideline
+      operationId: updateCultivationGuideline
+      requestBody: { $ref: "#/components/requestBodies/CultivationGuidelineBody" }
+      responses:
+        "200": { $ref: "#/components/responses/CultivationGuidelineResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Cultivation Guidelines]
+      summary: Delete a cultivation guideline (soft delete)
+      operationId: deleteCultivationGuideline
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /cultivation-risks:
+    get:
+      tags: [Cultivation Risks]
+      summary: List cultivation risks
+      operationId: listCultivationRisks
+      responses:
+        "200":
+          description: Array of cultivation risks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CultivationRisk" }
+    post:
+      tags: [Cultivation Risks]
+      summary: Create a cultivation risk
+      operationId: createCultivationRisk
+      requestBody: { $ref: "#/components/requestBodies/CultivationRiskBody" }
+      responses:
+        "201": { $ref: "#/components/responses/CultivationRiskResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /cultivation-risks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Cultivation Risks]
+      summary: Get a cultivation risk by id
+      operationId: getCultivationRisk
+      responses:
+        "200": { $ref: "#/components/responses/CultivationRiskResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Cultivation Risks]
+      summary: Update a cultivation risk
+      operationId: updateCultivationRisk
+      requestBody: { $ref: "#/components/requestBodies/CultivationRiskBody" }
+      responses:
+        "200": { $ref: "#/components/responses/CultivationRiskResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Cultivation Risks]
+      summary: Delete a cultivation risk (soft delete)
+      operationId: deleteCultivationRisk
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      operationId: listIncidents
+      responses:
+        "200":
+          description: Array of incidents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Incident" }
+    post:
+      tags: [Incidents]
+      summary: Create an incident
+      operationId: createIncident
+      requestBody: { $ref: "#/components/requestBodies/IncidentBody" }
+      responses:
+        "201": { $ref: "#/components/responses/IncidentResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /incidents/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Incidents]
+      summary: Get an incident by id
+      operationId: getIncident
+      responses:
+        "200": { $ref: "#/components/responses/IncidentResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Incidents]
+      summary: Update an incident
+      operationId: updateIncident
+      requestBody: { $ref: "#/components/requestBodies/IncidentBody" }
+      responses:
+        "200": { $ref: "#/components/responses/IncidentResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Incidents]
+      summary: Delete an incident (soft delete)
+      operationId: deleteIncident
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts
+      operationId: listAlerts
+      responses:
+        "200":
+          description: Array of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Alert" }
+    post:
+      tags: [Alerts]
+      summary: Create an alert
+      operationId: createAlert
+      requestBody: { $ref: "#/components/requestBodies/AlertBody" }
+      responses:
+        "201": { $ref: "#/components/responses/AlertResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /alerts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Alerts]
+      summary: Get an alert by id
+      operationId: getAlert
+      responses:
+        "200": { $ref: "#/components/responses/AlertResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Alerts]
+      summary: Update an alert
+      operationId: updateAlert
+      requestBody: { $ref: "#/components/requestBodies/AlertBody" }
+      responses:
+        "200": { $ref: "#/components/responses/AlertResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Alerts]
+      summary: Delete an alert (soft delete)
+      operationId: deleteAlert
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      responses:
+        "200":
+          description: Array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      tags: [Users]
+      summary: Create a user
+      operationId: createUser
+      requestBody: { $ref: "#/components/requestBodies/UserBody" }
+      responses:
+        "201": { $ref: "#/components/responses/UserResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      tags: [Users]
+      summary: Get a user by id
+      operationId: getUser
+      responses:
+        "200": { $ref: "#/components/responses/UserResponse" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Users]
+      summary: Update a user
+      operationId: updateUser
+      requestBody: { $ref: "#/components/requestBodies/UserBody" }
+      responses:
+        "200": { $ref: "#/components/responses/UserResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Users]
+      summary: Delete a user (soft delete)
+      operationId: deleteUser
+      responses:
+        "204": { $ref: "#/components/responses/Deleted" }
+        "400": { $ref: "#/components/responses/InvalidId" }
+
+components:
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Numeric identifier
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  responses:
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+    InvalidId:
+      description: The path id was not a valid integer
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: invalid id
+    NotFound:
+      description: No record with that id (also returned for soft-deleted records)
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: not found
+    Deleted:
+      description: Deleted (soft delete). No response body.
+    FarmResponse:
+      description: A farm
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Farm" }
+    RegionResponse:
+      description: A region
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Region" }
+    CultivationResponse:
+      description: A cultivation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Cultivation" }
+    FertilizerResponse:
+      description: A fertilizer
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Fertilizer" }
+    HazardResponse:
+      description: A hazard
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hazard" }
+    FieldResponse:
+      description: A field
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Field" }
+    FieldCoordinateResponse:
+      description: A field coordinate
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FieldCoordinate" }
+    CropResponse:
+      description: A crop
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Crop" }
+    CultivationGuidelineResponse:
+      description: A cultivation guideline
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CultivationGuideline" }
+    CultivationRiskResponse:
+      description: A cultivation risk
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CultivationRisk" }
+    IncidentResponse:
+      description: An incident
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Incident" }
+    AlertResponse:
+      description: An alert
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Alert" }
+    UserResponse:
+      description: A user
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/User" }
+
+  requestBodies:
+    FarmBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FarmRequest" }
+    RegionBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RegionRequest" }
+    CultivationBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CultivationRequest" }
+    FertilizerBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FertilizerRequest" }
+    HazardBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/HazardRequest" }
+    FieldBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FieldRequest" }
+    FieldCoordinateBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FieldCoordinateRequest" }
+    CropBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CropRequest" }
+    CultivationGuidelineBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CultivationGuidelineRequest" }
+    CultivationRiskBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CultivationRiskRequest" }
+    IncidentBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/IncidentRequest" }
+    AlertBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AlertRequest" }
+    UserBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/UserRequest" }
+
+  schemas:
+    Base:
+      type: object
+      description: Fields common to every persisted entity (from the ORM base model).
+      properties:
+        ID:
+          type: integer
+          format: int64
+          readOnly: true
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        UpdatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        DeletedAt:
+          type: [string, "null"]
+          format: date-time
+          readOnly: true
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: Name
+              message:
+                type: string
+                example: field is required
+
+    # ---- Farm ----
+    Farm:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Green Valley Farm }
+    FarmRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Green Valley Farm }
+
+    # ---- Region ----
+    Region:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Bavaria }
+            geoCode: { type: string, example: DE-BY }
+    RegionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Bavaria }
+        geoCode: { type: string, example: DE-BY }
+
+    # ---- Cultivation ----
+    Cultivation:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Winter Wheat }
+            estTimeToHarvestWeeks: { type: integer, example: 36 }
+    CultivationRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Winter Wheat }
+        estTimeToHarvestWeeks: { type: integer, example: 36 }
+
+    # ---- Fertilizer ----
+    Fertilizer:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Nitrogen Mix N-20 }
+    FertilizerRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Nitrogen Mix N-20 }
+
+    # ---- Hazard ----
+    Hazard:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Flood }
+            description: { type: string, example: Excess water from heavy rain }
+    HazardRequest:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string, example: Flood }
+        description: { type: string, example: Excess water from heavy rain }
+
+    # ---- Field ----
+    Field:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: North Field }
+            fieldNotes: { type: string, example: Loamy soil }
+            farmId: { type: integer, format: int64, example: 1 }
+            farm: { $ref: "#/components/schemas/Farm" }
+            regionId: { type: integer, format: int64, example: 1 }
+            region: { $ref: "#/components/schemas/Region" }
+    FieldRequest:
+      type: object
+      required: [name, farmId, regionId]
+      properties:
+        name: { type: string, example: North Field }
+        fieldNotes: { type: string, example: Loamy soil }
+        farmId: { type: integer, format: int64, example: 1 }
+        regionId: { type: integer, format: int64, example: 1 }
+
+    # ---- FieldCoordinate ----
+    FieldCoordinate:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            latitude: { type: number, format: double, example: 48.137 }
+            longitude: { type: number, format: double, example: 11.575 }
+            sequenceOrder: { type: integer, example: 1 }
+            fieldId: { type: integer, format: int64, example: 1 }
+            field: { $ref: "#/components/schemas/Field" }
+    FieldCoordinateRequest:
+      type: object
+      required: [latitude, longitude, fieldId]
+      properties:
+        latitude: { type: number, format: double, example: 48.137 }
+        longitude: { type: number, format: double, example: 11.575 }
+        sequenceOrder: { type: integer, example: 1 }
+        fieldId: { type: integer, format: int64, example: 1 }
+
+    # ---- Crop ----
+    Crop:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            status: { type: string, example: Growing }
+            datePlanted: { type: string, example: "2026-03-01" }
+            lastUpdated: { type: string, example: "2026-08-07" }
+            fieldId: { type: integer, format: int64, example: 1 }
+            field: { $ref: "#/components/schemas/Field" }
+            cultivationId: { type: integer, format: int64, example: 1 }
+            cultivation: { $ref: "#/components/schemas/Cultivation" }
+    CropRequest:
+      type: object
+      required: [fieldId, cultivationId]
+      properties:
+        status: { type: string, example: Growing }
+        datePlanted: { type: string, example: "2026-03-01" }
+        lastUpdated: { type: string, example: "2026-08-07" }
+        fieldId: { type: integer, format: int64, example: 1 }
+        cultivationId: { type: integer, format: int64, example: 1 }
+
+    # ---- CultivationGuideline ----
+    CultivationGuideline:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            type: { type: string, example: Fertilizing }
+            weekFrom: { type: integer, example: 4 }
+            weekTo: { type: integer, example: 8 }
+            instructions: { type: string, example: Apply nitrogen }
+            cultivationId: { type: integer, format: int64, example: 1 }
+            cultivation: { $ref: "#/components/schemas/Cultivation" }
+            fertilizerId:
+              type: [integer, "null"]
+              format: int64
+              example: 1
+            fertilizer:
+              oneOf:
+                - $ref: "#/components/schemas/Fertilizer"
+                - type: "null"
+    CultivationGuidelineRequest:
+      type: object
+      required: [cultivationId]
+      properties:
+        type: { type: string, example: Fertilizing }
+        weekFrom: { type: integer, example: 4 }
+        weekTo: { type: integer, example: 8 }
+        instructions: { type: string, example: Apply nitrogen }
+        cultivationId: { type: integer, format: int64, example: 1 }
+        fertilizerId:
+          type: [integer, "null"]
+          format: int64
+          description: Optional (nullable) foreign key
+          example: 1
+
+    # ---- CultivationRisk ----
+    CultivationRisk:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            weekFrom: { type: integer, example: 10 }
+            weekTo: { type: integer, example: 20 }
+            solution: { type: string, example: Improve drainage }
+            cultivationId: { type: integer, format: int64, example: 1 }
+            cultivation: { $ref: "#/components/schemas/Cultivation" }
+            hazardId: { type: integer, format: int64, example: 1 }
+            hazard: { $ref: "#/components/schemas/Hazard" }
+    CultivationRiskRequest:
+      type: object
+      required: [cultivationId, hazardId]
+      properties:
+        weekFrom: { type: integer, example: 10 }
+        weekTo: { type: integer, example: 20 }
+        solution: { type: string, example: Improve drainage }
+        cultivationId: { type: integer, format: int64, example: 1 }
+        hazardId: { type: integer, format: int64, example: 1 }
+
+    # ---- Incident ----
+    Incident:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            date: { type: string, example: "2026-07-15" }
+            priority: { type: string, example: High }
+            description: { type: string, example: Flooding in low areas }
+            cultivationRiskId: { type: integer, format: int64, example: 1 }
+            cultivationRisk: { $ref: "#/components/schemas/CultivationRisk" }
+            regionId: { type: integer, format: int64, example: 1 }
+            region: { $ref: "#/components/schemas/Region" }
+    IncidentRequest:
+      type: object
+      required: [cultivationRiskId, regionId]
+      properties:
+        date: { type: string, example: "2026-07-15" }
+        priority: { type: string, example: High }
+        description: { type: string, example: Flooding in low areas }
+        cultivationRiskId: { type: integer, format: int64, example: 1 }
+        regionId: { type: integer, format: int64, example: 1 }
+
+    # ---- Alert ----
+    Alert:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            fieldId: { type: integer, format: int64, example: 1 }
+            field: { $ref: "#/components/schemas/Field" }
+            incidentId: { type: integer, format: int64, example: 1 }
+            incident: { $ref: "#/components/schemas/Incident" }
+    AlertRequest:
+      type: object
+      required: [fieldId, incidentId]
+      properties:
+        fieldId: { type: integer, format: int64, example: 1 }
+        incidentId: { type: integer, format: int64, example: 1 }
+
+    # ---- User ----
+    User:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - type: object
+          properties:
+            name: { type: string, example: Hans }
+            surname: { type: string, example: Bauer }
+            title: { type: string, example: Mr }
+            email: { type: string, format: email, example: hans@greenvalley.de }
+            language: { type: string, example: de }
+            role: { type: string, enum: [Admin, Farmer], example: Farmer }
+            farmId: { type: integer, format: int64, example: 1 }
+            farm: { $ref: "#/components/schemas/Farm" }
+    UserRequest:
+      type: object
+      required: [name, email, role, farmId]
+      properties:
+        name: { type: string, example: Hans }
+        surname: { type: string, example: Bauer }
+        title: { type: string, example: Mr }
+        email: { type: string, format: email, example: hans@greenvalley.de }
+        language: { type: string, example: de }
+        role: { type: string, enum: [Admin, Farmer], example: Farmer }
+        farmId: { type: integer, format: int64, example: 1 }
+
+    # ---- Weather ----
+    ForecastResponse:
+      type: object
+      properties:
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        generationtime_ms: { type: number, format: double }
+        utc_offset_seconds: { type: integer }
+        timezone: { type: string }
+        timezone_abbreviation: { type: string }
+        elevation: { type: number, format: double }
+        hourly_units:
+          type: object
+          properties:
+            time: { type: string }
+            temperature_2m: { type: string }
+        hourly:
+          type: object
+          properties:
+            time:
+              type: array
+              items: { type: string }
+            temperature_2m:
+              type: array
+              items: { type: number, format: double }

@@ -52,7 +52,7 @@ func (s *Store) Create(ctx context.Context, req CreateFieldRequest) (*Field, err
 	if err := s.db.WithContext(ctx).Create(&f).Error; err != nil {
 		return nil, fmt.Errorf("create field failed: %w", err)
 	}
-	return &f, nil
+	return s.GetByID(ctx, int64(f.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldRequest) (*Field, error) {
@@ -67,7 +67,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldRequest) (*
 	if err := s.db.WithContext(ctx).Save(&f).Error; err != nil {
 		return nil, fmt.Errorf("update field failed: %w", err)
 	}
-	return &f, nil
+	return s.GetByID(ctx, int64(f.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

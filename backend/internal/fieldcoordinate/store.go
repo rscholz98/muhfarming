@@ -52,7 +52,7 @@ func (s *Store) Create(ctx context.Context, req CreateFieldCoordinateRequest) (*
 	if err := s.db.WithContext(ctx).Create(&fc).Error; err != nil {
 		return nil, fmt.Errorf("create fieldcoordinate failed: %w", err)
 	}
-	return &fc, nil
+	return s.GetByID(ctx, int64(fc.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldCoordinateRequest) (*FieldCoordinate, error) {
@@ -67,7 +67,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldCoordinateR
 	if err := s.db.WithContext(ctx).Save(&fc).Error; err != nil {
 		return nil, fmt.Errorf("update fieldcoordinate failed: %w", err)
 	}
-	return &fc, nil
+	return s.GetByID(ctx, int64(fc.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

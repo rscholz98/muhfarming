@@ -54,7 +54,7 @@ func (s *Store) Create(ctx context.Context, req CreateCultivationGuidelineReques
 	if err := s.db.WithContext(ctx).Create(&g).Error; err != nil {
 		return nil, fmt.Errorf("create cultivationguideline failed: %w", err)
 	}
-	return &g, nil
+	return s.GetByID(ctx, int64(g.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationGuidelineRequest) (*CultivationGuideline, error) {
@@ -71,7 +71,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationGuide
 	if err := s.db.WithContext(ctx).Save(&g).Error; err != nil {
 		return nil, fmt.Errorf("update cultivationguideline failed: %w", err)
 	}
-	return &g, nil
+	return s.GetByID(ctx, int64(g.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {

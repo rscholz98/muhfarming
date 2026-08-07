@@ -53,7 +53,7 @@ func (s *Store) Create(ctx context.Context, req CreateCropRequest) (*Crop, error
 	if err := s.db.WithContext(ctx).Create(&c).Error; err != nil {
 		return nil, fmt.Errorf("create crop failed: %w", err)
 	}
-	return &c, nil
+	return s.GetByID(ctx, int64(c.ID))
 }
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateCropRequest) (*Crop, error) {
@@ -69,7 +69,7 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateCropRequest) (*C
 	if err := s.db.WithContext(ctx).Save(&c).Error; err != nil {
 		return nil, fmt.Errorf("update crop failed: %w", err)
 	}
-	return &c, nil
+	return s.GetByID(ctx, int64(c.ID))
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
