@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"muhfarming/internal/auth"
+	"muhfarming/internal/scope"
+
 	"gorm.io/gorm"
 )
 
@@ -26,9 +29,19 @@ type store interface {
 	Delete(ctx context.Context, id int64) error
 }
 
+// scoped applies farmer ownership filtering. Admins see all coordinates;
+// farmers see only coordinates on fields they own.
+func scoped(ctx context.Context, db *gorm.DB) *gorm.DB {
+	id, ok := auth.FromContext(ctx)
+	if ok && id.IsAdmin() {
+		return db
+	}
+	return db.Where("field_id IN (?)", scope.FieldIDs(db, id.UserID))
+}
+
 func (s *Store) GetByID(ctx context.Context, id int64) (*FieldCoordinate, error) {
 	var fc FieldCoordinate
-	if err := s.db.WithContext(ctx).Preload("Field").First(&fc, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Field").First(&fc, id).Error; err != nil {
 		return nil, fmt.Errorf("fieldcoordinate not found: %w", err)
 	}
 	return &fc, nil
@@ -36,7 +49,7 @@ func (s *Store) GetByID(ctx context.Context, id int64) (*FieldCoordinate, error)
 
 func (s *Store) List(ctx context.Context) ([]FieldCoordinate, error) {
 	var coords []FieldCoordinate
-	if err := s.db.WithContext(ctx).Preload("Field").Find(&coords).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Field").Find(&coords).Error; err != nil {
 		return nil, err
 	}
 	return coords, nil
@@ -57,7 +70,7 @@ func (s *Store) Create(ctx context.Context, req CreateFieldCoordinateRequest) (*
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldCoordinateRequest) (*FieldCoordinate, error) {
 	var fc FieldCoordinate
-	if err := s.db.WithContext(ctx).First(&fc, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&fc, id).Error; err != nil {
 		return nil, fmt.Errorf("fieldcoordinate not found: %w", err)
 	}
 	fc.Latitude = req.Latitude
@@ -71,5 +84,12 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldCoordinateR
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	return s.db.WithContext(ctx).Delete(&FieldCoordinate{}, id).Error
+	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&FieldCoordinate{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

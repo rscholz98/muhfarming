@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"muhfarming/internal/auth"
+	"muhfarming/internal/scope"
+
 	"gorm.io/gorm"
 )
 
@@ -26,9 +29,19 @@ type store interface {
 	Delete(ctx context.Context, id int64) error
 }
 
+// scoped applies farmer ownership filtering. Admins see all alerts; farmers see
+// only alerts on fields they own.
+func scoped(ctx context.Context, db *gorm.DB) *gorm.DB {
+	id, ok := auth.FromContext(ctx)
+	if ok && id.IsAdmin() {
+		return db
+	}
+	return db.Where("field_id IN (?)", scope.FieldIDs(db, id.UserID))
+}
+
 func (s *Store) GetByID(ctx context.Context, id int64) (*Alert, error) {
 	var a Alert
-	if err := s.db.WithContext(ctx).Preload("Field").Preload("Incident").First(&a, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Field").Preload("Incident").First(&a, id).Error; err != nil {
 		return nil, fmt.Errorf("alert not found: %w", err)
 	}
 	return &a, nil
@@ -36,7 +49,7 @@ func (s *Store) GetByID(ctx context.Context, id int64) (*Alert, error) {
 
 func (s *Store) List(ctx context.Context) ([]Alert, error) {
 	var alerts []Alert
-	if err := s.db.WithContext(ctx).Preload("Field").Preload("Incident").Find(&alerts).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Field").Preload("Incident").Find(&alerts).Error; err != nil {
 		return nil, err
 	}
 	return alerts, nil
@@ -55,7 +68,7 @@ func (s *Store) Create(ctx context.Context, req CreateAlertRequest) (*Alert, err
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateAlertRequest) (*Alert, error) {
 	var a Alert
-	if err := s.db.WithContext(ctx).First(&a, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&a, id).Error; err != nil {
 		return nil, fmt.Errorf("alert not found: %w", err)
 	}
 	a.FieldID = req.FieldID
@@ -67,5 +80,12 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateAlertRequest) (*
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	return s.db.WithContext(ctx).Delete(&Alert{}, id).Error
+	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&Alert{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

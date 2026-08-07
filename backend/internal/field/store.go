@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"muhfarming/internal/auth"
+	"muhfarming/internal/scope"
+
 	"gorm.io/gorm"
 )
 
@@ -26,9 +29,19 @@ type store interface {
 	Delete(ctx context.Context, id int64) error
 }
 
+// scoped applies farmer ownership filtering. Admins see all fields; farmers see
+// only fields on farms they own.
+func scoped(ctx context.Context, db *gorm.DB) *gorm.DB {
+	id, ok := auth.FromContext(ctx)
+	if ok && id.IsAdmin() {
+		return db
+	}
+	return db.Where("farm_id IN (?)", scope.FarmIDs(db, id.UserID))
+}
+
 func (s *Store) GetByID(ctx context.Context, id int64) (*Field, error) {
 	var f Field
-	if err := s.db.WithContext(ctx).Preload("Farm").Preload("Region").First(&f, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Farm").Preload("Region").First(&f, id).Error; err != nil {
 		return nil, fmt.Errorf("field not found: %w", err)
 	}
 	return &f, nil
@@ -36,7 +49,7 @@ func (s *Store) GetByID(ctx context.Context, id int64) (*Field, error) {
 
 func (s *Store) List(ctx context.Context) ([]Field, error) {
 	var fields []Field
-	if err := s.db.WithContext(ctx).Preload("Farm").Preload("Region").Find(&fields).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Farm").Preload("Region").Find(&fields).Error; err != nil {
 		return nil, err
 	}
 	return fields, nil
@@ -57,7 +70,7 @@ func (s *Store) Create(ctx context.Context, req CreateFieldRequest) (*Field, err
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldRequest) (*Field, error) {
 	var f Field
-	if err := s.db.WithContext(ctx).First(&f, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&f, id).Error; err != nil {
 		return nil, fmt.Errorf("field not found: %w", err)
 	}
 	f.Name = req.Name
@@ -71,5 +84,12 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldRequest) (*
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	return s.db.WithContext(ctx).Delete(&Field{}, id).Error
+	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&Field{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

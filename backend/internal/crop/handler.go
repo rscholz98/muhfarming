@@ -2,11 +2,13 @@ package crop
 
 import (
 	"encoding/json"
+	"errors"
 	"muhfarming/internal/utils"
 	"net/http"
 	"strconv"
 
 	"github.com/go-playground/validator/v10"
+	"gorm.io/gorm"
 )
 
 var validate = validator.New()
@@ -95,6 +97,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "crop not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "failed to delete crop", http.StatusInternalServerError)
 		return
 	}

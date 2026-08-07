@@ -25,6 +25,7 @@ servers:
     description: The server that served this page. "Try it out" sends requests to the same host/port you loaded /docs from (e.g. http://localhost:8080 locally, or the deployed host). The API listens on port 8080 on all interfaces.
 
 tags:
+  - name: Auth
   - name: Farms
   - name: Regions
   - name: Cultivations
@@ -40,12 +41,76 @@ tags:
   - name: Users
   - name: System
 
+# All endpoints require a Bearer JWT except /auth/signup, /auth/login,
+# /health, and the docs. Obtain a token via /auth/login (or /auth/signup),
+# then click "Authorize" and paste it.
+security:
+  - bearerAuth: []
+
 paths:
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Register a new farmer account and receive a JWT
+      operationId: signup
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: farmer_hans }
+                password: { type: string, format: password, minLength: 6, example: s3cret123 }
+      responses:
+        "201":
+          description: Account created; returns a bearer token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409":
+          description: Username already taken
+          content:
+            text/plain:
+              schema: { type: string, example: username already taken }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate with username and password and receive a JWT
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: farmer_hans }
+                password: { type: string, format: password, example: s3cret123 }
+      responses:
+        "200":
+          description: Authenticated; returns a bearer token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401":
+          description: Invalid username or password
+          content:
+            text/plain:
+              schema: { type: string, example: invalid username or password }
+
   /health:
     get:
       tags: [System]
       summary: Health check
       operationId: getHealth
+      security: []
       responses:
         "200":
           description: Service is up
@@ -739,6 +804,13 @@ paths:
         "400": { $ref: "#/components/responses/InvalidId" }
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT obtained from /auth/login or /auth/signup. Send as `Authorization: Bearer <token>`."
+
   parameters:
     IdParam:
       name: id
@@ -951,6 +1023,12 @@ components:
         - type: object
           properties:
             name: { type: string, example: Green Valley Farm }
+            userId:
+              type: integer
+              format: int64
+              readOnly: true
+              description: Owning user; set automatically from the authenticated caller on create.
+              example: 1
     FarmRequest:
       type: object
       required: [name]
@@ -1183,25 +1261,32 @@ components:
         - $ref: "#/components/schemas/Base"
         - type: object
           properties:
+            username: { type: string, example: farmer_hans }
             name: { type: string, example: Hans }
             surname: { type: string, example: Bauer }
             title: { type: string, example: Mr }
             email: { type: string, format: email, example: hans@greenvalley.de }
             language: { type: string, example: de }
             role: { type: string, enum: [Admin, Farmer], example: Farmer }
-            farmId: { type: integer, format: int64, example: 1 }
-            farm: { $ref: "#/components/schemas/Farm" }
     UserRequest:
+      description: Admin-only user creation/update. On update, an empty password leaves it unchanged.
       type: object
-      required: [name, email, role, farmId]
+      required: [username, password, name, email, role]
       properties:
+        username: { type: string, example: farmer_hans }
+        password: { type: string, format: password, example: s3cret123 }
         name: { type: string, example: Hans }
         surname: { type: string, example: Bauer }
         title: { type: string, example: Mr }
         email: { type: string, format: email, example: hans@greenvalley.de }
         language: { type: string, example: de }
         role: { type: string, enum: [Admin, Farmer], example: Farmer }
-        farmId: { type: integer, format: int64, example: 1 }
+
+    TokenResponse:
+      type: object
+      properties:
+        token: { type: string, description: JWT bearer token }
+        role: { type: string, enum: [Admin, Farmer], example: Farmer }
 
     # ---- Weather ----
     ForecastResponse:

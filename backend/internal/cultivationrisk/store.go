@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"muhfarming/internal/auth"
+	"muhfarming/internal/scope"
+
 	"gorm.io/gorm"
 )
 
@@ -26,9 +29,19 @@ type store interface {
 	Delete(ctx context.Context, id int64) error
 }
 
+// scoped applies farmer ownership filtering. Admins see all risks; farmers see
+// only risks for cultivations they grow.
+func scoped(ctx context.Context, db *gorm.DB) *gorm.DB {
+	id, ok := auth.FromContext(ctx)
+	if ok && id.IsAdmin() {
+		return db
+	}
+	return db.Where("cultivation_id IN (?)", scope.CultivationIDs(db, id.UserID))
+}
+
 func (s *Store) GetByID(ctx context.Context, id int64) (*CultivationRisk, error) {
 	var cr CultivationRisk
-	if err := s.db.WithContext(ctx).Preload("Cultivation").Preload("Hazard").First(&cr, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Cultivation").Preload("Hazard").First(&cr, id).Error; err != nil {
 		return nil, fmt.Errorf("cultivationrisk not found: %w", err)
 	}
 	return &cr, nil
@@ -36,7 +49,7 @@ func (s *Store) GetByID(ctx context.Context, id int64) (*CultivationRisk, error)
 
 func (s *Store) List(ctx context.Context) ([]CultivationRisk, error) {
 	var risks []CultivationRisk
-	if err := s.db.WithContext(ctx).Preload("Cultivation").Preload("Hazard").Find(&risks).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Preload("Cultivation").Preload("Hazard").Find(&risks).Error; err != nil {
 		return nil, err
 	}
 	return risks, nil
@@ -58,7 +71,7 @@ func (s *Store) Create(ctx context.Context, req CreateCultivationRiskRequest) (*
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRiskRequest) (*CultivationRisk, error) {
 	var cr CultivationRisk
-	if err := s.db.WithContext(ctx).First(&cr, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&cr, id).Error; err != nil {
 		return nil, fmt.Errorf("cultivationrisk not found: %w", err)
 	}
 	cr.WeekFrom = req.WeekFrom
@@ -73,5 +86,12 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRiskR
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	return s.db.WithContext(ctx).Delete(&CultivationRisk{}, id).Error
+	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&CultivationRisk{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

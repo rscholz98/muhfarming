@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"muhfarming/internal/auth"
+	"muhfarming/internal/scope"
+
 	"gorm.io/gorm"
 )
 
@@ -26,9 +29,19 @@ type store interface {
 	Delete(ctx context.Context, id int64) error
 }
 
+// scoped applies farmer ownership filtering. Admins see all cultivations;
+// farmers see only cultivations they grow.
+func scoped(ctx context.Context, db *gorm.DB) *gorm.DB {
+	id, ok := auth.FromContext(ctx)
+	if ok && id.IsAdmin() {
+		return db
+	}
+	return db.Where("id IN (?)", scope.CultivationIDs(db, id.UserID))
+}
+
 func (s *Store) GetByID(ctx context.Context, id int64) (*Cultivation, error) {
 	var c Cultivation
-	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&c, id).Error; err != nil {
 		return nil, fmt.Errorf("cultivation not found: %w", err)
 	}
 	return &c, nil
@@ -36,7 +49,7 @@ func (s *Store) GetByID(ctx context.Context, id int64) (*Cultivation, error) {
 
 func (s *Store) List(ctx context.Context) ([]Cultivation, error) {
 	var cultivations []Cultivation
-	if err := s.db.WithContext(ctx).Find(&cultivations).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).Find(&cultivations).Error; err != nil {
 		return nil, err
 	}
 	return cultivations, nil
@@ -52,7 +65,7 @@ func (s *Store) Create(ctx context.Context, req CreateCultivationRequest) (*Cult
 
 func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRequest) (*Cultivation, error) {
 	var c Cultivation
-	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
+	if err := scoped(ctx, s.db.WithContext(ctx)).First(&c, id).Error; err != nil {
 		return nil, fmt.Errorf("cultivation not found: %w", err)
 	}
 	c.Name = req.Name
@@ -64,5 +77,12 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationReque
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	return s.db.WithContext(ctx).Delete(&Cultivation{}, id).Error
+	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&Cultivation{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
