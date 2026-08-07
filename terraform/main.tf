@@ -56,6 +56,40 @@ resource "aws_ecr_repository" "app" {
   force_delete         = true
 }
 
+# Security group
+resource "aws_security_group" "ec2" {
+  name        = "${local.name}-ec2"
+  description = "Allow HTTP on 8080 and HTTPS"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # EC2 instance
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -67,16 +101,16 @@ data "aws_ami" "amazon_linux" {
 }
 
 resource "aws_instance" "main" {
-  ami                  = data.aws_ami.amazon_linux.id
-  instance_type        = "t3.micro"
-  iam_instance_profile = aws_iam_instance_profile.ec2.name
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t3.micro"
+  iam_instance_profile   = aws_iam_instance_profile.ec2.name
+  vpc_security_group_ids = [aws_security_group.ec2.id]
 
   # Install docker and ssm agent on first boot
   user_data = <<-EOF
     #!/bin/bash
-    dnf install -y docker
+    dnf install -y docker amazon-ssm-agent ec2-instance-connect
     systemctl enable --now docker
-    dnf install -y amazon-ssm-agent
     systemctl enable --now amazon-ssm-agent
   EOF
 

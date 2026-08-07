@@ -22,6 +22,7 @@ type store interface {
 	GetByID(ctx context.Context, id int64) (*Hazard, error)
 	List(ctx context.Context) ([]Hazard, error)
 	Create(ctx context.Context, req CreateHazardRequest) (*Hazard, error)
+	Update(ctx context.Context, id int64, req UpdateHazardRequest) (*Hazard, error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -45,6 +46,19 @@ func (s *Store) Create(ctx context.Context, req CreateHazardRequest) (*Hazard, e
 	h := Hazard{Name: req.Name, Description: req.Description}
 	if err := s.db.WithContext(ctx).Create(&h).Error; err != nil {
 		return nil, fmt.Errorf("create hazard failed: %w", err)
+	}
+	return &h, nil
+}
+
+func (s *Store) Update(ctx context.Context, id int64, req UpdateHazardRequest) (*Hazard, error) {
+	var h Hazard
+	if err := s.db.WithContext(ctx).First(&h, id).Error; err != nil {
+		return nil, fmt.Errorf("hazard not found: %w", err)
+	}
+	h.Name = req.Name
+	h.Description = req.Description
+	if err := s.db.WithContext(ctx).Save(&h).Error; err != nil {
+		return nil, fmt.Errorf("update hazard failed: %w", err)
 	}
 	return &h, nil
 }

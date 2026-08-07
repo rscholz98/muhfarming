@@ -51,12 +51,22 @@ jobs:
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
-          COMMAND="aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY && docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG && docker stop muhfarming || true && docker rm muhfarming || true && docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          cat > /tmp/ssm-params.json <<EOF
+          {
+            "commands": [
+              "aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY",
+              "docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG",
+              "docker stop muhfarming || true",
+              "docker rm muhfarming || true",
+              "docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+            ]
+          }
+          EOF
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "{\"commands\":[\"$COMMAND\"]}" \
+            --parameters file:///tmp/ssm-params.json \
             --query "Command.CommandId" \
             --output text)
 

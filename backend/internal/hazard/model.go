@@ -12,3 +12,8 @@ type CreateHazardRequest struct {
 	Name        string `json:"name"        validate:"required"`
 	Description string `json:"description" validate:"required"`
 }
+
+type UpdateHazardRequest struct {
+	Name        string `json:"name"        validate:"required"`
+	Description string `json:"description" validate:"required"`
+}

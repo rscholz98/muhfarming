@@ -1,0 +1,77 @@
+package cultivationrisk
+
+import (
+	"context"
+	"fmt"
+
+	"gorm.io/gorm"
+)
+
+type Store struct {
+	db *gorm.DB
+}
+
+func NewStore(db *gorm.DB) (*Store, error) {
+	if err := db.AutoMigrate(&CultivationRisk{}); err != nil {
+		return nil, fmt.Errorf("migrate cultivationrisk: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
+type store interface {
+	GetByID(ctx context.Context, id int64) (*CultivationRisk, error)
+	List(ctx context.Context) ([]CultivationRisk, error)
+	Create(ctx context.Context, req CreateCultivationRiskRequest) (*CultivationRisk, error)
+	Update(ctx context.Context, id int64, req UpdateCultivationRiskRequest) (*CultivationRisk, error)
+	Delete(ctx context.Context, id int64) error
+}
+
+func (s *Store) GetByID(ctx context.Context, id int64) (*CultivationRisk, error) {
+	var cr CultivationRisk
+	if err := s.db.WithContext(ctx).Preload("Cultivation").Preload("Hazard").First(&cr, id).Error; err != nil {
+		return nil, fmt.Errorf("cultivationrisk not found: %w", err)
+	}
+	return &cr, nil
+}
+
+func (s *Store) List(ctx context.Context) ([]CultivationRisk, error) {
+	var risks []CultivationRisk
+	if err := s.db.WithContext(ctx).Preload("Cultivation").Preload("Hazard").Find(&risks).Error; err != nil {
+		return nil, err
+	}
+	return risks, nil
+}
+
+func (s *Store) Create(ctx context.Context, req CreateCultivationRiskRequest) (*CultivationRisk, error) {
+	cr := CultivationRisk{
+		WeekFrom:      req.WeekFrom,
+		WeekTo:        req.WeekTo,
+		Solution:      req.Solution,
+		CultivationID: req.CultivationID,
+		HazardID:      req.HazardID,
+	}
+	if err := s.db.WithContext(ctx).Create(&cr).Error; err != nil {
+		return nil, fmt.Errorf("create cultivationrisk failed: %w", err)
+	}
+	return &cr, nil
+}
+
+func (s *Store) Update(ctx context.Context, id int64, req UpdateCultivationRiskRequest) (*CultivationRisk, error) {
+	var cr CultivationRisk
+	if err := s.db.WithContext(ctx).First(&cr, id).Error; err != nil {
+		return nil, fmt.Errorf("cultivationrisk not found: %w", err)
+	}
+	cr.WeekFrom = req.WeekFrom
+	cr.WeekTo = req.WeekTo
+	cr.Solution = req.Solution
+	cr.CultivationID = req.CultivationID
+	cr.HazardID = req.HazardID
+	if err := s.db.WithContext(ctx).Save(&cr).Error; err != nil {
+		return nil, fmt.Errorf("update cultivationrisk failed: %w", err)
+	}
+	return &cr, nil
+}
+
+func (s *Store) Delete(ctx context.Context, id int64) error {
+	return s.db.WithContext(ctx).Delete(&CultivationRisk{}, id).Error
+}

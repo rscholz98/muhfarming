@@ -1,4 +1,4 @@
-package hazard
+package farm
 
 import (
 	"encoding/json"
@@ -20,13 +20,13 @@ func NewHandler(s store) *Handler {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	hazards, err := h.store.List(r.Context())
+	farms, err := h.store.List(r.Context())
 	if err != nil {
-		http.Error(w, "failed to list hazards", http.StatusInternalServerError)
+		http.Error(w, "failed to list farms", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(hazards)
+	json.NewEncoder(w).Encode(farms)
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -35,17 +35,17 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	hazard, err := h.store.GetByID(r.Context(), id)
+	farm, err := h.store.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, "hazard not found", http.StatusNotFound)
+		http.Error(w, "farm not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(hazard)
+	json.NewEncoder(w).Encode(farm)
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var req CreateHazardRequest
+	var req CreateFarmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -54,14 +54,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		utils.WriteValidationError(w, err)
 		return
 	}
-	hazard, err := h.store.Create(r.Context(), req)
+	farm, err := h.store.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, "failed to create hazard", http.StatusInternalServerError)
+		http.Error(w, "failed to create farm", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(hazard)
+	json.NewEncoder(w).Encode(farm)
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	var req UpdateHazardRequest
+	var req UpdateFarmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -79,13 +79,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		utils.WriteValidationError(w, err)
 		return
 	}
-	hazard, err := h.store.Update(r.Context(), id, req)
+	farm, err := h.store.Update(r.Context(), id, req)
 	if err != nil {
-		http.Error(w, "hazard not found", http.StatusNotFound)
+		http.Error(w, "farm not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(hazard)
+	json.NewEncoder(w).Encode(farm)
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.Delete(r.Context(), id); err != nil {
-		http.Error(w, "failed to delete hazard", http.StatusInternalServerError)
+		http.Error(w, "failed to delete farm", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
