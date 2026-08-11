@@ -45,6 +45,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=muhfarming" "Name=instance-state-name,Values=running" \
@@ -59,7 +60,7 @@ jobs:
               "docker stop muhfarming || true",
               "docker rm muhfarming || true",
               "mkdir -p /opt/muhfarming/data",
-              "docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 -v /opt/muhfarming/data:/data $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+              "docker run -d --name muhfarming --restart unless-stopped -p 8080:8080 -v /opt/muhfarming/data:/data -e JWT_SECRET=$JWT_SECRET $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
             ]
           }
           EOF
