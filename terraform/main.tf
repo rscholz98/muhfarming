@@ -138,6 +138,14 @@ resource "aws_instance" "main" {
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
   vpc_security_group_ids = [aws_security_group.ec2.id]
 
+  # The AMI defaults to a 2 GB root volume, which is too small for the OS
+  # plus the app image (Go server + Litestream). Grow it; gp3 supports
+  # online resize so this is an in-place change, not a replacement.
+  root_block_device {
+    volume_size = 16
+    volume_type = "gp3"
+  }
+
   # Install docker and ssm agent on first boot
   user_data = <<-EOF
     #!/bin/bash
