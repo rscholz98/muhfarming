@@ -1,306 +1,154 @@
 package com.mobile.sap.data.repository
 
-import com.mobile.sap.data.model.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import com.mobile.sap.data.api.ApiService
+import com.mobile.sap.data.api.RetrofitClient
+import com.mobile.sap.data.api.dto.FarmRequest
+import com.mobile.sap.data.model.Coordinate
+import com.mobile.sap.data.model.Field
+import com.mobile.sap.util.FieldMapper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-object FieldRepository {
-
-    // Mocked fields data for Cameroon cities - Focused on Yaoundé for visibility
-    private val mockFields = listOf(
-        // Yaoundé - Coffee Field 1 (North of city center)
-        Field(
-            id = "field-yaounde-1",
-            region = "Centre",
-            coordinates = listOf(
-                Coordinate(3.870, 11.510),
-                Coordinate(3.870, 11.520),
-                Coordinate(3.860, 11.520),
-                Coordinate(3.860, 11.510),
-                Coordinate(3.870, 11.510)
-            ),
-            incidents = listOf(
-                Incident(
-                    id = "inc-1",
-                    type = "Pest",
-                    description = "Coffee berry borer detected",
-                    reportedAt = "2026-06-15T08:30:00Z"
-                )
-            ),
-            hazards = listOf(
-                Hazard(
-                    id = "haz-1",
-                    name = "Heavy Rainfall",
-                    severity = HazardSeverity.MEDIUM
-                )
-            ),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-1",
-                    name = "Organic Compost",
-                    quantity = 120.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Coffee",
-                season = "Rainy Season",
-                status = "Growing"
-            ),
-            cultivationGuideline = "Shade-grown coffee requires regular pruning and pest monitoring",
-            cultivationRisk = CultivationRisk.MEDIUM,
-            createdAt = "2026-01-10T10:00:00Z",
-            updatedAt = "2026-06-15T09:30:00Z"
-        ),
-
-        // Yaoundé - Plantain Field 2 (East of city center)
-        Field(
-            id = "field-yaounde-2",
-            region = "Centre",
-            coordinates = listOf(
-                Coordinate(3.855, 11.530),
-                Coordinate(3.855, 11.540),
-                Coordinate(3.845, 11.540),
-                Coordinate(3.845, 11.530),
-                Coordinate(3.855, 11.530)
-            ),
-            incidents = emptyList(),
-            hazards = listOf(
-                Hazard(
-                    id = "haz-2",
-                    name = "Soil Erosion",
-                    severity = HazardSeverity.LOW
-                )
-            ),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-2",
-                    name = "Potash",
-                    quantity = 80.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Plantain",
-                season = "Year-round",
-                status = "Growing"
-            ),
-            cultivationGuideline = "Ensure adequate drainage and mulching",
-            cultivationRisk = CultivationRisk.LOW,
-            createdAt = "2026-02-20T10:00:00Z",
-            updatedAt = "2026-06-14T11:30:00Z"
-        ),
-
-        // Yaoundé - Cassava Field 3 (South of city center)
-        Field(
-            id = "field-yaounde-3",
-            region = "Centre",
-            coordinates = listOf(
-                Coordinate(3.830, 11.505),
-                Coordinate(3.830, 11.515),
-                Coordinate(3.820, 11.515),
-                Coordinate(3.820, 11.505),
-                Coordinate(3.830, 11.505)
-            ),
-            incidents = listOf(
-                Incident(
-                    id = "inc-3",
-                    type = "Disease",
-                    description = "Cassava mosaic disease spotted",
-                    reportedAt = "2026-06-12T14:20:00Z"
-                )
-            ),
-            hazards = listOf(
-                Hazard(
-                    id = "haz-3",
-                    name = "Disease Outbreak",
-                    severity = HazardSeverity.HIGH
-                )
-            ),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-3",
-                    name = "NPK 15-15-15",
-                    quantity = 100.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Cassava",
-                season = "Main Season",
-                status = "Mature"
-            ),
-            cultivationGuideline = "Remove infected plants immediately, apply disease-resistant varieties",
-            cultivationRisk = CultivationRisk.HIGH,
-            createdAt = "2025-12-05T09:00:00Z",
-            updatedAt = "2026-06-12T15:00:00Z"
-        ),
-
-        // Yaoundé - Maize Field 4 (West of city center)
-        Field(
-            id = "field-yaounde-4",
-            region = "Centre",
-            coordinates = listOf(
-                Coordinate(3.850, 11.480),
-                Coordinate(3.850, 11.490),
-                Coordinate(3.840, 11.490),
-                Coordinate(3.840, 11.480),
-                Coordinate(3.850, 11.480)
-            ),
-            incidents = emptyList(),
-            hazards = emptyList(),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-4",
-                    name = "Urea",
-                    quantity = 150.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Maize",
-                season = "First Season",
-                status = "Flowering"
-            ),
-            cultivationGuideline = "Monitor for fall armyworm, apply top-dressing fertilizer",
-            cultivationRisk = CultivationRisk.MEDIUM,
-            createdAt = "2026-03-15T08:30:00Z",
-            updatedAt = "2026-06-10T10:15:00Z"
-        ),
-
-        // Yaoundé - Vegetable Garden 5 (Northwest)
-        Field(
-            id = "field-yaounde-5",
-            region = "Centre",
-            coordinates = listOf(
-                Coordinate(3.865, 11.495),
-                Coordinate(3.865, 11.502),
-                Coordinate(3.858, 11.502),
-                Coordinate(3.858, 11.495),
-                Coordinate(3.865, 11.495)
-            ),
-            incidents = emptyList(),
-            hazards = emptyList(),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-5",
-                    name = "Organic Compost",
-                    quantity = 200.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Mixed Vegetables",
-                season = "All Year",
-                status = "Growing"
-            ),
-            cultivationGuideline = "Rotate crops every 8 weeks, maintain organic practices",
-            cultivationRisk = CultivationRisk.LOW,
-            createdAt = "2026-01-20T07:00:00Z",
-            updatedAt = "2026-06-15T09:00:00Z"
-        ),
-
-        // Douala - Cocoa Field (larger polygon)
-        Field(
-            id = "field-douala-1",
-            region = "Littoral",
-            coordinates = listOf(
-                Coordinate(4.060, 9.760),
-                Coordinate(4.060, 9.775),
-                Coordinate(4.045, 9.775),
-                Coordinate(4.045, 9.760),
-                Coordinate(4.060, 9.760)
-            ),
-            incidents = emptyList(),
-            hazards = listOf(
-                Hazard(
-                    id = "haz-6",
-                    name = "Black Pod Disease Risk",
-                    severity = HazardSeverity.HIGH
-                )
-            ),
-            fertilizers = listOf(
-                Fertilizer(
-                    id = "fert-6",
-                    name = "NPK Fertilizer",
-                    quantity = 200.0,
-                    unit = "kg"
-                ),
-                Fertilizer(
-                    id = "fert-7",
-                    name = "Potassium",
-                    quantity = 50.0,
-                    unit = "kg"
-                )
-            ),
-            cultivation = Cultivation(
-                cropType = "Cocoa",
-                season = "Year-round",
-                status = "Harvesting"
-            ),
-            cultivationGuideline = "Monitor for fungal diseases, maintain shade cover at 40-50%",
-            cultivationRisk = CultivationRisk.HIGH,
-            createdAt = "2025-11-20T14:00:00Z",
-            updatedAt = "2026-06-14T16:20:00Z"
-        )
-    )
+/**
+ * Fields data backed by the muhfarming backend. Reads combine `GET /fields`
+ * with `GET /field-coordinates` (grouped by fieldId); writes go through
+ * `POST/PUT/DELETE /fields` and `POST /field-coordinates`. The JWT is attached
+ * automatically by the auth interceptor in [RetrofitClient].
+ */
+class FieldRepository(
+    private val api: ApiService = RetrofitClient.apiService
+) {
 
     /**
-     * Get all fields, optionally filtered by region
+     * Fetch all of the caller's fields, hydrated with their coordinates.
+     * Optionally filter by region name (matched against the UI region label).
      */
-    fun getFields(region: String? = null): Flow<List<Field>> = flow {
-        delay(300) // Simulate network delay
+    suspend fun getFields(region: String? = null): Result<List<Field>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val fieldsResp = api.getFields()
+                if (!fieldsResp.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception("Failed to load fields (${fieldsResp.code()})")
+                    )
+                }
+                val coordsResp = api.getFieldCoordinates()
+                val coordinates = if (coordsResp.isSuccessful) {
+                    coordsResp.body().orEmpty()
+                } else {
+                    emptyList()
+                }
 
-        val filtered = if (region != null) {
-            mockFields.filter { it.region.equals(region, ignoreCase = true) }
-        } else {
-            mockFields
+                val fields = fieldsResp.body().orEmpty().map { dto ->
+                    FieldMapper.toUiField(dto, coordinates)
+                }
+
+                val filtered = if (region != null) {
+                    fields.filter { it.region.equals(region, ignoreCase = true) }
+                } else {
+                    fields
+                }
+                Result.success(filtered)
+            } catch (e: Exception) {
+                Result.failure(Exception("Network error while loading fields."))
+            }
         }
 
-        emit(filtered)
+    /** Fields whose polygon centroid is within [radiusKm] of the given point. */
+    suspend fun getFieldsNearLocation(
+        latitude: Double,
+        longitude: Double,
+        radiusKm: Double = 5.0
+    ): Result<List<Field>> = getFields().map { fields ->
+        fields.filter { field ->
+            if (field.coordinates.isEmpty()) return@filter false
+            val avgLat = field.coordinates.map { it.latitude }.average()
+            val avgLng = field.coordinates.map { it.longitude }.average()
+            calculateDistance(latitude, longitude, avgLat, avgLng) <= radiusKm
+        }
     }
 
     /**
-     * Get fields by city coordinates (within a radius)
+     * Create a field: ensure the caller has a farm, then `POST /fields` and
+     * `POST /field-coordinates` for each selected corner.
      */
-    fun getFieldsNearLocation(latitude: Double, longitude: Double, radiusKm: Double = 5.0): Flow<List<Field>> = flow {
-        delay(300)
+    suspend fun createField(field: Field): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val farmId = ensureFarm() ?: return@withContext Result.failure(
+                Exception("Could not find or create a farm for this account.")
+            )
 
-        val nearbyFields = mockFields.filter { field ->
-            // Check if field center is within radius
-            val fieldCenter = field.coordinates.let { coords ->
-                val avgLat = coords.map { it.latitude }.average()
-                val avgLng = coords.map { it.longitude }.average()
-                Coordinate(avgLat, avgLng)
+            val fieldResp = api.createField(FieldMapper.toFieldRequest(field, farmId))
+            val created = fieldResp.body()
+            if (!fieldResp.isSuccessful || created == null) {
+                return@withContext Result.failure(
+                    Exception("Failed to create field (${fieldResp.code()})")
+                )
             }
 
-            val distance = calculateDistance(latitude, longitude, fieldCenter.latitude, fieldCenter.longitude)
-            distance <= radiusKm
+            FieldMapper.toCoordinateRequests(field, created.ID).forEach { req ->
+                api.createFieldCoordinate(req)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while creating field."))
         }
-
-        emit(nearbyFields)
     }
 
     /**
-     * Get a single field by ID
+     * Update a field's name/notes. Coordinate editing is not exposed by the UI,
+     * so coordinates are left untouched.
      */
-    fun getFieldById(fieldId: String): Flow<Field?> = flow {
-        delay(200)
-        emit(mockFields.find { it.id == fieldId })
+    suspend fun updateField(field: Field): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val id = field.id.toLongOrNull()
+                ?: return@withContext Result.failure(Exception("Invalid field id."))
+            // farmId isn't editable in the UI; reuse the caller's farm.
+            val farmId = ensureFarm() ?: return@withContext Result.failure(
+                Exception("Could not resolve the farm for this field.")
+            )
+            val resp = api.updateField(id, FieldMapper.toFieldRequest(field, farmId))
+            if (resp.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to update field (${resp.code()})"))
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while updating field."))
+        }
+    }
+
+    /** Delete a field by its (numeric) id. */
+    suspend fun deleteField(fieldId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val id = fieldId.toLongOrNull()
+                ?: return@withContext Result.failure(Exception("Invalid field id."))
+            val resp = api.deleteField(id)
+            if (resp.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to delete field (${resp.code()})"))
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting field."))
+        }
     }
 
     /**
-     * Calculate distance between two coordinates (Haversine formula)
+     * Return the caller's first farm id, creating a default farm if none exist.
+     * Returns null only when both the lookup and the creation fail.
      */
+    private suspend fun ensureFarm(): Long? {
+        val farmsResp = api.getFarms()
+        if (farmsResp.isSuccessful) {
+            farmsResp.body()?.firstOrNull()?.let { return it.ID }
+        }
+        val createResp = api.createFarm(FarmRequest(name = "My Farm"))
+        return if (createResp.isSuccessful) createResp.body()?.ID else null
+    }
+
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371.0 // Earth radius in kilometers
+        val r = 6371.0 // Earth radius in kilometers
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
         val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                 Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
                 Math.sin(dLon / 2) * Math.sin(dLon / 2)
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c
+        return r * c
     }
 }

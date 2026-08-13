@@ -23,6 +23,7 @@ import com.mobile.sap.ui.screens.LoginScreen
 import com.mobile.sap.ui.screens.PestManagementScreen
 import com.mobile.sap.ui.screens.SettingsScreen
 import com.mobile.sap.ui.screens.WeatherScreen
+import com.mobile.sap.data.auth.SessionManager
 import com.mobile.sap.ui.theme.*
 import com.mobile.sap.ui.viewmodel.WeatherViewModel
 
@@ -36,8 +37,11 @@ fun AppNavigation() {
         )
     )
 
-    var isLoggedIn by remember { mutableStateOf(false) }
-    var isAdmin by remember { mutableStateOf(false) }
+    val session = remember { SessionManager.get(context.applicationContext) }
+
+    // Restore any persisted session so a returning user skips the login screen.
+    var isLoggedIn by remember { mutableStateOf(session.isLoggedIn) }
+    var isAdmin by remember { mutableStateOf(session.isAdmin) }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -104,23 +108,16 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Login.route,
+            startDestination = if (isLoggedIn) Screen.Weather.route else Screen.Login.route,
             modifier = Modifier.padding(innerPadding),
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None }
         ) {
             composable(Screen.Login.route) {
                 LoginScreen(
-                    onAdminLogin = {
+                    onLoginSuccess = { role ->
                         isLoggedIn = true
-                        isAdmin = true
-                        navController.navigate(Screen.Weather.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
-                    },
-                    onFarmerLogin = {
-                        isLoggedIn = true
-                        isAdmin = false
+                        isAdmin = role.equals("Admin", ignoreCase = true)
                         navController.navigate(Screen.Weather.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
@@ -137,7 +134,19 @@ fun AppNavigation() {
                 PestManagementScreen(isAdmin = isAdmin)
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(weatherViewModel = weatherViewModel)
+                SettingsScreen(
+                    weatherViewModel = weatherViewModel,
+                    onLogout = {
+                        session.clear()
+                        isLoggedIn = false
+                        isAdmin = false
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                inclusive = true
+                            }
+                        }
+                    }
+                )
             }
         }
     }

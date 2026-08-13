@@ -90,9 +90,9 @@ fun FieldsScreen(
     val city = CameroonCities.getCityByName(location) ?: CameroonCities.getDefaultCity()
     val position = LatLng(city.latitude, city.longitude)
 
-    // Load all fields (mocked data - no backend yet)
+    // Load all fields from the backend
     LaunchedEffect(Unit) {
-        Log.d("FieldsScreen", "Loading all fields from mocked data")
+        Log.d("FieldsScreen", "Loading all fields from backend")
         fieldViewModel.loadAllFields()
     }
 

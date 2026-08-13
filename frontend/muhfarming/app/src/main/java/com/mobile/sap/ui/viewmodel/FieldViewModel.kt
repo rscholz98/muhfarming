@@ -16,7 +16,9 @@ sealed class FieldUiState {
     data class Error(val message: String) : FieldUiState()
 }
 
-class FieldViewModel : ViewModel() {
+class FieldViewModel(
+    private val repository: FieldRepository = FieldRepository()
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<FieldUiState>(FieldUiState.Loading)
     val uiState: StateFlow<FieldUiState> = _uiState.asStateFlow()
@@ -31,53 +33,44 @@ class FieldViewModel : ViewModel() {
     fun loadAllFields() {
         viewModelScope.launch {
             _uiState.value = FieldUiState.Loading
-            Log.d("FieldViewModel", "Loading all fields...")
-            try {
-                FieldRepository.getFields(null).collect { fields ->
-                    Log.d("FieldViewModel", "Loaded ${fields.size} fields from repository")
+            repository.getFields(null).fold(
+                onSuccess = { fields ->
+                    Log.d("FieldViewModel", "Loaded ${fields.size} fields from backend")
                     _uiState.value = FieldUiState.Success(fields)
+                },
+                onFailure = { e ->
+                    Log.e("FieldViewModel", "Error loading fields", e)
+                    _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
                 }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error loading fields", e)
-                _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
-            }
+            )
         }
     }
 
     fun loadFields(region: String? = null) {
         viewModelScope.launch {
             _uiState.value = FieldUiState.Loading
-            Log.d("FieldViewModel", "Loading fields for region: $region")
-            try {
-                FieldRepository.getFields(region).collect { fields ->
-                    Log.d("FieldViewModel", "Loaded ${fields.size} fields")
-                    _uiState.value = FieldUiState.Success(fields)
+            repository.getFields(region).fold(
+                onSuccess = { _uiState.value = FieldUiState.Success(it) },
+                onFailure = { e ->
+                    _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
                 }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error loading fields", e)
-                _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
-            }
+            )
         }
     }
 
     fun loadFieldsNearLocation(latitude: Double, longitude: Double, radiusKm: Double = 10.0) {
         viewModelScope.launch {
             _uiState.value = FieldUiState.Loading
-            Log.d("FieldViewModel", "Loading fields near ($latitude, $longitude) within ${radiusKm}km")
-            try {
-                FieldRepository.getFieldsNearLocation(latitude, longitude, radiusKm).collect { fields ->
-                    Log.d("FieldViewModel", "Found ${fields.size} fields near location")
-                    if (fields.isEmpty()) {
-                        Log.w("FieldViewModel", "No fields found nearby, loading all fields instead")
-                        loadAllFields()
-                    } else {
-                        _uiState.value = FieldUiState.Success(fields)
-                    }
+            repository.getFieldsNearLocation(latitude, longitude, radiusKm).fold(
+                onSuccess = { fields ->
+                    // Fall back to all fields if none are nearby so the map isn't empty.
+                    if (fields.isEmpty()) loadAllFields()
+                    else _uiState.value = FieldUiState.Success(fields)
+                },
+                onFailure = { e ->
+                    _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
                 }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error loading nearby fields", e)
-                _uiState.value = FieldUiState.Error(e.message ?: "Unknown error occurred")
-            }
+            )
         }
     }
 
@@ -87,57 +80,37 @@ class FieldViewModel : ViewModel() {
 
     fun addField(field: Field) {
         viewModelScope.launch {
-            Log.d("FieldViewModel", "Adding new field: ${field.id}")
-            try {
-                // TODO: Make API call to create field when backend is ready
-                // For now, add to local state
-                val currentState = _uiState.value
-                if (currentState is FieldUiState.Success) {
-                    val updatedFields = currentState.fields + field
-                    _uiState.value = FieldUiState.Success(updatedFields)
-                    Log.d("FieldViewModel", "Field added successfully. Total fields: ${updatedFields.size}")
-                }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error adding field", e)
-            }
+            repository.createField(field).fold(
+                onSuccess = {
+                    Log.d("FieldViewModel", "Field created; reloading")
+                    loadAllFields()
+                },
+                onFailure = { e -> Log.e("FieldViewModel", "Error creating field", e) }
+            )
         }
     }
 
     fun updateField(updatedField: Field) {
         viewModelScope.launch {
-            Log.d("FieldViewModel", "Updating field: ${updatedField.id}")
-            try {
-                // TODO: Make API call to update field when backend is ready
-                // For now, update in local state
-                val currentState = _uiState.value
-                if (currentState is FieldUiState.Success) {
-                    val updatedFields = currentState.fields.map { field ->
-                        if (field.id == updatedField.id) updatedField else field
-                    }
-                    _uiState.value = FieldUiState.Success(updatedFields)
-                    Log.d("FieldViewModel", "Field updated successfully")
-                }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error updating field", e)
-            }
+            repository.updateField(updatedField).fold(
+                onSuccess = {
+                    Log.d("FieldViewModel", "Field updated; reloading")
+                    loadAllFields()
+                },
+                onFailure = { e -> Log.e("FieldViewModel", "Error updating field", e) }
+            )
         }
     }
 
     fun deleteField(fieldId: String) {
         viewModelScope.launch {
-            Log.d("FieldViewModel", "Deleting field: $fieldId")
-            try {
-                // TODO: Make API call to delete field when backend is ready
-                // For now, remove from local state
-                val currentState = _uiState.value
-                if (currentState is FieldUiState.Success) {
-                    val updatedFields = currentState.fields.filter { it.id != fieldId }
-                    _uiState.value = FieldUiState.Success(updatedFields)
-                    Log.d("FieldViewModel", "Field deleted successfully. Remaining fields: ${updatedFields.size}")
-                }
-            } catch (e: Exception) {
-                Log.e("FieldViewModel", "Error deleting field", e)
-            }
+            repository.deleteField(fieldId).fold(
+                onSuccess = {
+                    Log.d("FieldViewModel", "Field deleted; reloading")
+                    loadAllFields()
+                },
+                onFailure = { e -> Log.e("FieldViewModel", "Error deleting field", e) }
+            )
         }
     }
 }

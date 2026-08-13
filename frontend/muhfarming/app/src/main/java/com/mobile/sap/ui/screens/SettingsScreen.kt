@@ -25,13 +25,15 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    weatherViewModel: WeatherViewModel = viewModel()
+    weatherViewModel: WeatherViewModel = viewModel(),
+    onLogout: () -> Unit = {}
 ) {
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showCityDialog by remember { mutableStateOf(false) }
     var showTemperatureDialog by remember { mutableStateOf(false) }
     var showWindSpeedDialog by remember { mutableStateOf(false) }
     var showPrecipitationDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     var selectedLanguage by remember { mutableStateOf("English") }
     val currentLocation by weatherViewModel.location.collectAsState()
@@ -209,8 +211,52 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                SectionHeader("Account")
+            }
+
+            item {
+                LogoutCard(onClick = { showLogoutDialog = true })
+            }
+
             item { Spacer(modifier = Modifier.height(4.dp)) }
         }
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = {
+                Text(
+                    text = "Log Out",
+                    fontWeight = FontWeight.SemiBold,
+                    color = FioriBlack,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to log out?",
+                    color = FioriBlack,
+                    fontSize = 15.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    onLogout()
+                }) {
+                    Text("Log Out", color = FioriError, fontWeight = FontWeight.Medium)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel", color = FioriBlue, fontWeight = FontWeight.Medium)
+                }
+            },
+            containerColor = FioriWhite,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 
     if (showLanguageDialog) {
@@ -520,6 +566,40 @@ fun InfoCard(
                 color = FioriDarkGray.copy(alpha = 0.6f),
                 fontWeight = FontWeight.Normal,
                 fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun LogoutCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = FioriWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "🚪",
+                fontSize = 22.sp,
+                modifier = Modifier.padding(end = 16.dp)
+            )
+            Text(
+                text = "Log Out",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = FioriError,
+                fontSize = 15.sp,
+                letterSpacing = 0.sp,
+                modifier = Modifier.weight(1f)
             )
         }
     }
