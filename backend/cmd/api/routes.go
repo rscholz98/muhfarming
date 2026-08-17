@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"muhfarming/internal/alert"
 	"muhfarming/internal/auth"
 	"muhfarming/internal/crop"
@@ -51,6 +52,11 @@ func setUpRoutes(db *gorm.DB, tokens *auth.TokenService, userStore *user.Store) 
 	// Region — reference data. Read scoped to farmer's regions; writes admin-only.
 	regionStore, err := region.NewStore(db)
 	if err != nil {
+		return nil, err
+	}
+	// Seed Cameroon's 10 regions (idempotent) so fields resolve to real region
+	// names instead of a bare id.
+	if err := regionStore.EnsureRegions(context.Background()); err != nil {
 		return nil, err
 	}
 	regionHandler := region.NewHandler(regionStore)
