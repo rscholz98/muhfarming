@@ -4,8 +4,8 @@ import com.mobile.sap.data.api.dto.FieldCoordinateDto
 import com.mobile.sap.data.api.dto.FieldCoordinateRequest
 import com.mobile.sap.data.api.dto.FieldDto
 import com.mobile.sap.data.api.dto.FieldRequest
+import com.mobile.sap.data.model.CameroonRegions
 import com.mobile.sap.data.model.Coordinate
-import com.mobile.sap.data.model.Cultivation
 import com.mobile.sap.data.model.Field
 
 /**
@@ -32,37 +32,36 @@ object FieldMapper {
             .sortedBy { it.sequenceOrder }
             .map { Coordinate(latitude = it.latitude, longitude = it.longitude) }
 
-        // Prefer the nested region name; fall back to the numeric id as text so
-        // the details card always shows something.
+        // Prefer the nested region name; fall back to the known Cameroon region
+        // for that id, then to the numeric id as text so the details card always
+        // shows something.
         val regionLabel = dto.region?.name?.takeIf { it.isNotBlank() }
+            ?: CameroonRegions.nameForId(dto.regionId)
             ?: dto.regionId.toString()
-
-        val cropName = dto.name?.takeIf { it.isNotBlank() } ?: "Field"
 
         return Field(
             id = dto.ID.toString(),
+            name = dto.name?.takeIf { it.isNotBlank() } ?: "Field",
             region = regionLabel,
+            farmId = dto.farmId,
             coordinates = ordered,
-            cultivation = Cultivation(
-                cropType = cropName,
-                season = "",
-                status = ""
-            ),
-            cultivationGuideline = dto.fieldNotes?.takeIf { it.isNotBlank() },
-            cultivationRisk = null
+            cultivationGuideline = dto.fieldNotes?.takeIf { it.isNotBlank() }
         )
     }
 
     /**
-     * Map a UI [Field] (from the add/edit form) to a backend field request.
-     * `name` carries the crop type, `fieldNotes` carries the guideline, and the
-     * region string is parsed to a numeric id when possible.
+     * Map a UI [Field] (from the add/edit form) to a backend field request. A
+     * field belongs to a farm and a region: `farmId` is chosen in the form,
+     * `name`/`fieldNotes` are free text, and the region string (a Cameroon
+     * region name from the dropdown) is mapped to its backend id.
      */
     fun toFieldRequest(field: Field, farmId: Long): FieldRequest = FieldRequest(
-        name = field.cultivation?.cropType?.takeIf { it.isNotBlank() } ?: "Field",
+        name = field.name.takeIf { it.isNotBlank() } ?: "Field",
         fieldNotes = field.cultivationGuideline,
         farmId = farmId,
-        regionId = field.region.trim().toLongOrNull() ?: DEFAULT_REGION_ID
+        regionId = CameroonRegions.idForName(field.region)
+            ?: field.region.trim().toLongOrNull()
+            ?: DEFAULT_REGION_ID
     )
 
     /** Build ordered coordinate requests for a newly created field. */

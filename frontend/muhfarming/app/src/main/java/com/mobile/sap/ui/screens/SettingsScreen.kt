@@ -3,20 +3,19 @@ package com.mobile.sap.ui.screens
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mobile.sap.data.model.*
+import com.mobile.sap.ui.components.*
 import com.mobile.sap.ui.theme.*
 import com.mobile.sap.ui.viewmodel.WeatherViewModel
 import java.text.SimpleDateFormat
@@ -66,160 +65,146 @@ fun SettingsScreen(
                 title = {
                     Text(
                         text = "Settings",
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 20.sp,
-                        letterSpacing = 0.sp
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = FioriBlue,
-                    titleContentColor = FioriWhite
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         },
-        containerColor = FioriLightGray
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
 
             item {
-                SectionHeader("Location")
-            }
-
-            item {
-                SwitchSettingCard(
-                    icon = "📍",
-                    title = "Auto Geolocation",
-                    subtitle = if (settings.useAutoLocation) "Using current location" else "Manual city selection",
-                    checked = settings.useAutoLocation,
-                    onCheckedChange = { enabled ->
-                        if (enabled && !locationPermissionGranted) {
-                            requestLocationPermission()
-                        } else {
-                            weatherViewModel.updateLocationMode(enabled)
+                SectionLabel("Location")
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionCard(contentPadding = PaddingValues(0.dp)) {
+                    SwitchSettingRow(
+                        icon = "📍",
+                        title = "Auto Geolocation",
+                        subtitle = if (settings.useAutoLocation) "Using current location" else "Manual city selection",
+                        checked = settings.useAutoLocation,
+                        onCheckedChange = { enabled ->
+                            if (enabled && !locationPermissionGranted) {
+                                requestLocationPermission()
+                            } else {
+                                weatherViewModel.updateLocationMode(enabled)
+                            }
                         }
+                    )
+                    if (settings.useAutoLocation) {
+                        RowDivider()
+                        LocationRefreshRow(
+                            currentLocation = currentLocation,
+                            lastUpdateTime = settings.lastUpdateTime,
+                            onRefresh = { weatherViewModel.refreshAutoLocation() }
+                        )
+                    } else {
+                        RowDivider()
+                        SettingRow(
+                            icon = "🏙️",
+                            title = "City",
+                            subtitle = currentLocation,
+                            onClick = { showCityDialog = true }
+                        )
                     }
-                )
-            }
-
-            if (settings.useAutoLocation) {
-                item {
-                    LocationRefreshCard(
-                        currentLocation = currentLocation,
-                        lastUpdateTime = settings.lastUpdateTime,
-                        onRefresh = { weatherViewModel.refreshAutoLocation() }
-                    )
-                }
-            } else {
-                item {
-                    SettingCard(
-                        icon = "🏙️",
-                        title = "City",
-                        subtitle = currentLocation,
-                        onClick = { showCityDialog = true }
-                    )
                 }
             }
 
             item {
-                SectionHeader("Units")
+                SectionLabel("Units")
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionCard(contentPadding = PaddingValues(0.dp)) {
+                    SettingRow(
+                        icon = "🌡",
+                        title = "Temperature",
+                        subtitle = settings.temperatureUnit.symbol,
+                        onClick = { showTemperatureDialog = true }
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = "💨",
+                        title = "Wind Speed",
+                        subtitle = settings.windSpeedUnit.symbol,
+                        onClick = { showWindSpeedDialog = true }
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = "🌧",
+                        title = "Precipitation",
+                        subtitle = settings.precipitationUnit.symbol,
+                        onClick = { showPrecipitationDialog = true }
+                    )
+                }
             }
 
             item {
-                SettingCard(
-                    icon = "🌡",
-                    title = "Temperature",
-                    subtitle = settings.temperatureUnit.symbol,
-                    onClick = { showTemperatureDialog = true }
-                )
+                SectionLabel("Data Options")
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionCard(contentPadding = PaddingValues(0.dp)) {
+                    SwitchSettingRow(
+                        icon = "🌱",
+                        title = "Soil Data",
+                        subtitle = "Show soil temperature & moisture",
+                        checked = settings.showSoilData,
+                        onCheckedChange = { weatherViewModel.toggleSoilData(it) }
+                    )
+                    RowDivider()
+                    SwitchSettingRow(
+                        icon = "⏱",
+                        title = "Current Weather",
+                        subtitle = "Show current conditions",
+                        checked = settings.showCurrentWeather,
+                        onCheckedChange = { weatherViewModel.toggleCurrentWeather(it) }
+                    )
+                }
             }
 
             item {
-                SettingCard(
-                    icon = "💨",
-                    title = "Wind Speed",
-                    subtitle = settings.windSpeedUnit.symbol,
-                    onClick = { showWindSpeedDialog = true }
-                )
+                SectionLabel("About")
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionCard(contentPadding = PaddingValues(0.dp)) {
+                    SettingRow(
+                        icon = "🌍",
+                        title = "Language",
+                        subtitle = selectedLanguage,
+                        onClick = { showLanguageDialog = true }
+                    )
+                    RowDivider()
+                    InfoRow(
+                        icon = "ℹ️",
+                        title = "App Version",
+                        value = "1.0.0"
+                    )
+                    RowDivider()
+                    InfoRow(
+                        icon = "📱",
+                        title = "Build",
+                        value = "2026.06.12"
+                    )
+                }
             }
 
             item {
-                SettingCard(
-                    icon = "🌧",
-                    title = "Precipitation",
-                    subtitle = settings.precipitationUnit.symbol,
-                    onClick = { showPrecipitationDialog = true }
-                )
+                SectionLabel("Account")
+                Spacer(modifier = Modifier.height(8.dp))
+                SectionCard(contentPadding = PaddingValues(0.dp)) {
+                    LogoutRow(onClick = { showLogoutDialog = true })
+                }
             }
 
-            item {
-                SectionHeader("Data Options")
-            }
-
-            item {
-                SwitchSettingCard(
-                    icon = "🌱",
-                    title = "Soil Data",
-                    subtitle = "Show soil temperature & moisture",
-                    checked = settings.showSoilData,
-                    onCheckedChange = { weatherViewModel.toggleSoilData(it) }
-                )
-            }
-
-            item {
-                SwitchSettingCard(
-                    icon = "⏱",
-                    title = "Current Weather",
-                    subtitle = "Show current conditions",
-                    checked = settings.showCurrentWeather,
-                    onCheckedChange = { weatherViewModel.toggleCurrentWeather(it) }
-                )
-            }
-
-            item {
-                SectionHeader("App")
-            }
-
-            item {
-                SettingCard(
-                    icon = "🌍",
-                    title = "Language",
-                    subtitle = selectedLanguage,
-                    onClick = { showLanguageDialog = true }
-                )
-            }
-
-            item {
-                InfoCard(
-                    icon = "ℹ️",
-                    title = "App Version",
-                    value = "1.0.0"
-                )
-            }
-
-            item {
-                InfoCard(
-                    icon = "📱",
-                    title = "Build",
-                    value = "2026.06.12"
-                )
-            }
-
-            item {
-                SectionHeader("Account")
-            }
-
-            item {
-                LogoutCard(onClick = { showLogoutDialog = true })
-            }
-
-            item { Spacer(modifier = Modifier.height(4.dp)) }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
         }
     }
 
@@ -229,16 +214,16 @@ fun SettingsScreen(
             title = {
                 Text(
                     text = "Log Out",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = FioriBlack,
-                    fontSize = 18.sp
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             },
             text = {
                 Text(
                     text = "Are you sure you want to log out?",
-                    color = FioriBlack,
-                    fontSize = 15.sp
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -246,16 +231,24 @@ fun SettingsScreen(
                     showLogoutDialog = false
                     onLogout()
                 }) {
-                    Text("Log Out", color = FioriError, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Log Out",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel", color = FioriBlue, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Cancel",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             },
-            containerColor = FioriWhite,
-            shape = RoundedCornerShape(16.dp)
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.large
         )
     }
 
@@ -332,61 +325,64 @@ fun SettingsScreen(
 }
 
 @Composable
-fun LocationRefreshCard(
+private fun RowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 46.dp),
+        color = MaterialTheme.colorScheme.outlineVariant
+    )
+}
+
+@Composable
+private fun RowIcon(icon: String) {
+    Text(
+        text = icon,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(end = 14.dp)
+    )
+}
+
+@Composable
+fun LocationRefreshRow(
     currentLocation: String,
     lastUpdateTime: Long?,
     onRefresh: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
+        RowIcon("🔄")
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = currentLocation,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = if (lastUpdateTime != null) {
+                    "Updated: ${formatLastUpdate(lastUpdateTime)}"
+                } else {
+                    "Not yet updated"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Button(
+            onClick = onRefresh,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            shape = MaterialTheme.shapes.small,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "🔄",
-                fontSize = 22.sp,
-                modifier = Modifier.padding(end = 16.dp)
+                text = "Refresh",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = currentLocation,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = FioriBlack,
-                    fontSize = 15.sp,
-                    letterSpacing = 0.sp
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = if (lastUpdateTime != null) {
-                        "Updated: ${formatLastUpdate(lastUpdateTime)}"
-                    } else {
-                        "Not yet updated"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FioriDarkGray.copy(alpha = 0.7f),
-                    fontSize = 13.sp
-                )
-            }
-            Button(
-                onClick = onRefresh,
-                colors = ButtonDefaults.buttonColors(containerColor = FioriBlue),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = "Refresh",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
     }
 }
@@ -407,201 +403,134 @@ private fun formatLastUpdate(timestamp: Long): String {
 }
 
 @Composable
-fun SectionHeader(text: String) {
-    Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Medium,
-        color = FioriDarkGray.copy(alpha = 0.7f),
-        fontSize = 11.sp,
-        letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 2.dp, top = 8.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
-fun SettingCard(
+fun SettingRow(
     icon: String,
     title: String,
     subtitle: String,
     onClick: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .clickable(onClick = onClick)
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        RowIcon(icon)
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = icon,
-                fontSize = 22.sp,
-                modifier = Modifier.padding(end = 16.dp)
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = FioriBlack,
-                    fontSize = 15.sp,
-                    letterSpacing = 0.sp
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FioriDarkGray.copy(alpha = 0.7f),
-                    fontSize = 13.sp
-                )
-            }
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "›",
-                fontSize = 20.sp,
-                color = FioriDarkGray.copy(alpha = 0.3f)
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Text(
+            text = "›",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
     }
 }
 
 @Composable
-fun SwitchSettingCard(
+fun SwitchSettingRow(
     icon: String,
     title: String,
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        RowIcon(icon)
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = icon,
-                fontSize = 22.sp,
-                modifier = Modifier.padding(end = 16.dp)
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = FioriBlack,
-                    fontSize = 15.sp,
-                    letterSpacing = 0.sp
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FioriDarkGray.copy(alpha = 0.7f),
-                    fontSize = 13.sp
-                )
-            }
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = FioriWhite,
-                    checkedTrackColor = FioriBlue,
-                    uncheckedThumbColor = FioriWhite,
-                    uncheckedTrackColor = FioriGray
-                )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+                uncheckedTrackColor = MaterialTheme.colorScheme.outline
+            )
+        )
     }
 }
 
 @Composable
-fun InfoCard(
+fun InfoRow(
     icon: String,
     title: String,
     value: String
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = icon,
-                fontSize = 22.sp,
-                modifier = Modifier.padding(end = 16.dp)
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = FioriBlack,
-                    fontSize = 15.sp,
-                    letterSpacing = 0.sp
-                )
-            }
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = FioriDarkGray.copy(alpha = 0.6f),
-                fontWeight = FontWeight.Normal,
-                fontSize = 13.sp
-            )
-        }
+        RowIcon(icon)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
-fun LogoutCard(onClick: () -> Unit) {
-    Card(
+fun LogoutRow(onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .clickable(onClick = onClick)
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "🚪",
-                fontSize = 22.sp,
-                modifier = Modifier.padding(end = 16.dp)
-            )
-            Text(
-                text = "Log Out",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = FioriError,
-                fontSize = 15.sp,
-                letterSpacing = 0.sp,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        Text(
+            text = "🚪",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(end = 14.dp)
+        )
+        Text(
+            text = "Log Out",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -618,9 +547,9 @@ fun OptionDialog(
         title = {
             Text(
                 text = title,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = FioriBlack,
-                fontSize = 18.sp
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
@@ -637,15 +566,14 @@ fun OptionDialog(
                             selected = option == currentSelection,
                             onClick = { onSelect(option) },
                             colors = RadioButtonDefaults.colors(
-                                selectedColor = FioriBlue
+                                selectedColor = MaterialTheme.colorScheme.primary
                             )
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = option,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = FioriBlack,
-                            fontSize = 15.sp
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -655,12 +583,12 @@ fun OptionDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     "Close",
-                    color = FioriBlue,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
             }
         },
-        containerColor = FioriWhite,
-        shape = RoundedCornerShape(16.dp)
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large
     )
 }

@@ -18,9 +18,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.mobile.sap.ui.screens.AlertsScreen
+import com.mobile.sap.ui.screens.CultivationGuideScreen
+import com.mobile.sap.ui.screens.FarmsScreen
 import com.mobile.sap.ui.screens.FieldsScreen
 import com.mobile.sap.ui.screens.LoginScreen
-import com.mobile.sap.ui.screens.PestManagementScreen
 import com.mobile.sap.ui.screens.SettingsScreen
 import com.mobile.sap.ui.screens.WeatherScreen
 import com.mobile.sap.data.auth.SessionManager
@@ -52,23 +54,25 @@ fun AppNavigation() {
     val screens = listOf(
         Screen.Weather,
         Screen.Fields,
-        Screen.PestManagement,
+        Screen.CultivationGuide,
+        Screen.Alerts,
         Screen.Settings
     )
 
     Scaffold(
-        containerColor = FioriLightGray,
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(
-                    containerColor = FioriWhite,
-                    tonalElevation = NavigationBarDefaults.Elevation
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp
                 ) {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentDestination = navBackStackEntry?.destination
 
                     screens.forEach { screen ->
+                        val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
                         NavigationBarItem(
                             icon = {
                                 Icon(
@@ -79,11 +83,11 @@ fun AppNavigation() {
                             label = {
                                 Text(
                                     text = screen.title,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                                     fontSize = 12.sp
                                 )
                             },
-                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                            selected = selected,
                             onClick = {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
@@ -94,11 +98,11 @@ fun AppNavigation() {
                                 }
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = FioriBlue,
-                                selectedTextColor = FioriBlue,
-                                unselectedIconColor = FioriDarkGray,
-                                unselectedTextColor = FioriDarkGray,
-                                indicatorColor = FioriBlue.copy(alpha = 0.1f)
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
                         )
                     }
@@ -128,10 +132,20 @@ fun AppNavigation() {
                 WeatherScreen(viewModel = weatherViewModel)
             }
             composable(Screen.Fields.route) {
-                FieldsScreen(weatherViewModel = weatherViewModel, isAdmin = isAdmin)
+                FieldsScreen(
+                    weatherViewModel = weatherViewModel,
+                    isAdmin = isAdmin,
+                    onOpenFarms = { navController.navigate(Screen.Farms.route) }
+                )
             }
-            composable(Screen.PestManagement.route) {
-                PestManagementScreen(isAdmin = isAdmin)
+            composable(Screen.Farms.route) {
+                FarmsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.CultivationGuide.route) {
+                CultivationGuideScreen(isAdmin = isAdmin)
+            }
+            composable(Screen.Alerts.route) {
+                AlertsScreen(isAdmin = isAdmin)
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(

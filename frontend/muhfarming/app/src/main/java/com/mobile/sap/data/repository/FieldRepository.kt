@@ -69,16 +69,18 @@ class FieldRepository(
     }
 
     /**
-     * Create a field: ensure the caller has a farm, then `POST /fields` and
-     * `POST /field-coordinates` for each selected corner.
+     * Create a field on the given farm: `POST /fields` then
+     * `POST /field-coordinates` for each selected corner. Falls back to
+     * [ensureFarm] only when no farm was chosen (e.g. legacy callers).
      */
-    suspend fun createField(field: Field): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun createField(field: Field, farmId: Long): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val farmId = ensureFarm() ?: return@withContext Result.failure(
+            val resolvedFarmId = farmId.takeIf { it > 0 } ?: ensureFarm()
+            ?: return@withContext Result.failure(
                 Exception("Could not find or create a farm for this account.")
             )
 
-            val fieldResp = api.createField(FieldMapper.toFieldRequest(field, farmId))
+            val fieldResp = api.createField(FieldMapper.toFieldRequest(field, resolvedFarmId))
             val created = fieldResp.body()
             if (!fieldResp.isSuccessful || created == null) {
                 return@withContext Result.failure(
@@ -96,18 +98,22 @@ class FieldRepository(
     }
 
     /**
-     * Update a field's name/notes. Coordinate editing is not exposed by the UI,
-     * so coordinates are left untouched.
+     * Update a field's name/notes/region, keeping it on its current farm.
+     * Coordinate editing is not exposed by the UI, so coordinates are left
+     * untouched.
      */
     suspend fun updateField(field: Field): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val id = field.id.toLongOrNull()
                 ?: return@withContext Result.failure(Exception("Invalid field id."))
-            // farmId isn't editable in the UI; reuse the caller's farm.
-            val farmId = ensureFarm() ?: return@withContext Result.failure(
-                Exception("Could not resolve the farm for this field.")
-            )
-            val resp = api.updateField(id, FieldMapper.toFieldRequest(field, farmId))
+            // Preserve the field's existing farm; fall back to the caller's farm.
+            val currentFarmId = api.getFields().body()
+                ?.firstOrNull { it.ID == id }?.farmId?.takeIf { it > 0 }
+                ?: ensureFarm()
+                ?: return@withContext Result.failure(
+                    Exception("Could not resolve the farm for this field.")
+                )
+            val resp = api.updateField(id, FieldMapper.toFieldRequest(field, currentFarmId))
             if (resp.isSuccessful) Result.success(Unit)
             else Result.failure(Exception("Failed to update field (${resp.code()})"))
         } catch (e: Exception) {

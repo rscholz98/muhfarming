@@ -6,21 +6,24 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Agriculture
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,7 +43,6 @@ import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
-import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 import com.mobile.sap.data.model.CameroonCities
@@ -48,6 +50,7 @@ import com.mobile.sap.data.model.CultivationRisk
 import com.mobile.sap.data.model.Field
 import com.mobile.sap.data.model.HazardSeverity
 import com.mobile.sap.ui.theme.*
+import com.mobile.sap.ui.components.*
 import com.mobile.sap.ui.viewmodel.FieldUiState
 import com.mobile.sap.ui.viewmodel.FieldViewModel
 import com.mobile.sap.ui.viewmodel.WeatherViewModel
@@ -57,11 +60,15 @@ import com.mobile.sap.ui.viewmodel.WeatherViewModel
 fun FieldsScreen(
     weatherViewModel: WeatherViewModel = viewModel(),
     fieldViewModel: FieldViewModel = viewModel(),
-    isAdmin: Boolean = false
+    farmViewModel: com.mobile.sap.ui.viewmodel.FarmViewModel = viewModel(),
+    isAdmin: Boolean = false,
+    onOpenFarms: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val location by weatherViewModel.location.collectAsState()
     val fieldUiState by fieldViewModel.uiState.collectAsState()
+    val farmUiState by farmViewModel.uiState.collectAsState()
+    val farms = (farmUiState as? com.mobile.sap.ui.viewmodel.FarmUiState.Success)?.farms ?: emptyList()
     val selectedField by fieldViewModel.selectedField.collectAsState()
     var showInfoCard by remember { mutableStateOf(true) }
     var mapLibreMap by remember { mutableStateOf<MapLibreMap?>(null) }
@@ -73,6 +80,10 @@ fun FieldsScreen(
     // Coordinate selection mode states
     var isSelectingCoordinates by remember { mutableStateOf(false) }
     var selectedCoordinates by remember { mutableStateOf<List<com.mobile.sap.data.model.Coordinate>>(emptyList()) }
+
+    // Farm filter: null = "All farms" (show every field). Otherwise only fields
+    // on the selected farm are drawn.
+    var selectedFarmFilterId by remember { mutableStateOf<Long?>(null) }
 
     // Initialize MapLibre
     DisposableEffect(Unit) {
@@ -104,26 +115,32 @@ fun FieldsScreen(
                     Column {
                         Text(
                             text = "Fields",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 20.sp,
-                            letterSpacing = 0.sp
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = location,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 13.sp,
-                            letterSpacing = 0.sp,
-                            color = FioriWhite.copy(alpha = 0.85f)
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f)
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = FioriBlue,
-                    titleContentColor = FioriWhite
-                )
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White
+                ),
+                actions = {
+                    IconButton(onClick = onOpenFarms) {
+                        Icon(
+                            imageVector = Icons.Outlined.Agriculture,
+                            contentDescription = "Manage farms",
+                            tint = Color.White
+                        )
+                    }
+                }
             )
         },
-        containerColor = FioriLightGray
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -134,11 +151,14 @@ fun FieldsScreen(
             var fields by remember { mutableStateOf<List<Field>>(emptyList()) }
             var mapStyleLoaded by remember { mutableStateOf(false) }
 
-            // Update fields when UI state changes
-            LaunchedEffect(fieldUiState) {
+            // Update fields when UI state or the farm filter changes.
+            LaunchedEffect(fieldUiState, selectedFarmFilterId) {
                 if (fieldUiState is FieldUiState.Success) {
-                    val newFields = (fieldUiState as FieldUiState.Success).fields
-                    Log.d("FieldsScreen", "UI State updated with ${newFields.size} fields")
+                    val allFields = (fieldUiState as FieldUiState.Success).fields
+                    val newFields = selectedFarmFilterId?.let { farmId ->
+                        allFields.filter { it.farmId == farmId }
+                    } ?: allFields
+                    Log.d("FieldsScreen", "UI State updated with ${newFields.size} fields (filter=$selectedFarmFilterId)")
                     fields = newFields
 
                     // If map style is already loaded, add fields immediately
@@ -146,6 +166,7 @@ fun FieldsScreen(
                         mapView?.getMapAsync { map ->
                             map.style?.let { style ->
                                 Log.d("FieldsScreen", "Adding fields after state change")
+                                removeFieldsFromMap(style)
                                 addFieldsToMap(style, fields)
                             }
                         }
@@ -231,9 +252,12 @@ fun FieldsScreen(
                                         // Update markers and preview polygon on map
                                         updateSelectionMarkers(style, selectedCoordinates)
                                     } else {
-                                        // Query features at click point
+                                        // Query features at click point — check
+                                        // polygon fills and point markers.
                                         val screenPoint = map.projection.toScreenLocation(point)
-                                        val features = map.queryRenderedFeatures(screenPoint, "field-fill-layer")
+                                        val features = map.queryRenderedFeatures(
+                                            screenPoint, "field-fill-layer", "field-marker-layer"
+                                        )
 
                                         if (features.isNotEmpty()) {
                                             val feature = features.first()
@@ -277,11 +301,51 @@ fun FieldsScreen(
             )
 
 
+            // Farm filter chips overlaying the top of the map (hidden while
+            // picking coordinates). "All" clears the filter; each chip narrows
+            // the visible fields to one farm.
+            if (farms.isNotEmpty() && !isSelectingCoordinates) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedFarmFilterId == null,
+                        onClick = { selectedFarmFilterId = null },
+                        label = { Text("All farms") },
+                        shape = MaterialTheme.shapes.small,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                    farms.forEach { farm ->
+                        FilterChip(
+                            selected = selectedFarmFilterId == farm.ID,
+                            onClick = {
+                                selectedFarmFilterId =
+                                    if (selectedFarmFilterId == farm.ID) null else farm.ID
+                            },
+                            label = { Text(farm.name ?: "Unnamed farm") },
+                            shape = MaterialTheme.shapes.small,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
             // Loading indicator
             if (fieldUiState is FieldUiState.Loading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
-                    color = FioriBlue
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -294,14 +358,13 @@ fun FieldsScreen(
                 enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
                 exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = FioriWhite.copy(alpha = 0.95f)
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -312,19 +375,15 @@ fun FieldsScreen(
                         Column {
                             Text(
                                 text = city.name,
-                                fontSize = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = FioriBlack
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            val fieldCount = if (fieldUiState is FieldUiState.Success) {
-                                (fieldUiState as FieldUiState.Success).fields.size
-                            } else {
-                                0
-                            }
+                            val fieldCount = fields.size
                             Text(
                                 text = "$fieldCount field${if (fieldCount != 1) "s" else ""} nearby",
-                                fontSize = 11.sp,
-                                color = FioriDarkGray.copy(alpha = 0.7f)
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -333,235 +392,217 @@ fun FieldsScreen(
 
             // Field details card when a field is selected
             selectedField?.let { field ->
-                Card(
+                SectionCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = FioriWhite
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        .padding(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
+                    // Header with close and edit buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Header with close and edit buttons
+                        Text(
+                            text = field.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = field.cultivation?.cropType ?: "Field",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = FioriBlack
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (isAdmin) {
-                                    IconButton(
-                                        onClick = {
-                                            fieldToEdit = field
-                                            showAddFieldDialog = true
-                                        },
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Edit,
-                                            contentDescription = "Edit Field",
-                                            tint = FioriBlue
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            fieldToDelete = field
-                                            showDeleteConfirmation = true
-                                        },
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Field",
-                                            tint = FioriError
-                                        )
-                                    }
-                                }
+                            if (isAdmin) {
                                 IconButton(
-                                    onClick = { fieldViewModel.selectField(null) },
-                                    modifier = Modifier.size(40.dp)
+                                    onClick = {
+                                        fieldToEdit = field
+                                        showAddFieldDialog = true
+                                    },
+                                    modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Close",
-                                        tint = FioriDarkGray
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Field",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        fieldToDelete = field
+                                        showDeleteConfirmation = true
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Field",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
+                            IconButton(
+                                onClick = { fieldViewModel.selectField(null) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
+                    }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                        // Region
+                    // Region
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = "📍", fontSize = 14.sp)
+                        Text(
+                            text = field.region,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Cultivation info
+                    field.cultivation?.let { cultivation ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Season",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = cultivation.season,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Status",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = cultivation.status,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Cultivation Risk
+                    field.cultivationRisk?.let { risk ->
+                        val riskColor = when (risk) {
+                            CultivationRisk.LOW -> Success
+                            CultivationRisk.MEDIUM -> Warning
+                            CultivationRisk.HIGH -> Danger
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(text = "📍", fontSize = 14.sp)
                             Text(
-                                text = field.region,
-                                fontSize = 14.sp,
-                                color = FioriDarkGray
+                                text = "Risk Level:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            StatusPill(text = risk.name, color = riskColor)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Cultivation Guideline
+                    field.cultivationGuideline?.let { guideline ->
+                        Text(
+                            text = "Guidelines",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = guideline,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Incidents
+                    if (field.incidents.isNotEmpty()) {
+                        Text(
+                            text = "⚠️ Incidents (${field.incidents.size})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        field.incidents.forEach { incident ->
+                            Text(
+                                text = "• ${incident.type}: ${incident.description}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
                             )
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = FioriGray)
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Cultivation info
-                        field.cultivation?.let { cultivation ->
+                    // Hazards
+                    if (field.hazards.isNotEmpty()) {
+                        Text(
+                            text = "⚡ Hazards (${field.hazards.size})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Warning
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        field.hazards.forEach { hazard ->
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Season",
-                                        fontSize = 12.sp,
-                                        color = FioriDarkGray.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        text = cultivation.season,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = FioriBlack
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        text = "Status",
-                                        fontSize = 12.sp,
-                                        color = FioriDarkGray.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        text = cultivation.status,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = FioriBlue
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        // Cultivation Risk
-                        field.cultivationRisk?.let { risk ->
-                            val riskColor = when (risk) {
-                                CultivationRisk.LOW -> FioriSuccess
-                                CultivationRisk.MEDIUM -> FioriWarning
-                                CultivationRisk.HIGH -> FioriError
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Risk Level:",
-                                    fontSize = 14.sp,
-                                    color = FioriDarkGray
+                                    text = "•",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Surface(
-                                    color = riskColor.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = risk.name,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = riskColor,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        // Cultivation Guideline
-                        field.cultivationGuideline?.let { guideline ->
-                            Text(
-                                text = "Guidelines",
-                                fontSize = 12.sp,
-                                color = FioriDarkGray.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = guideline,
-                                fontSize = 13.sp,
-                                color = FioriBlack,
-                                lineHeight = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        // Incidents
-                        if (field.incidents.isNotEmpty()) {
-                            Text(
-                                text = "⚠️ Incidents (${field.incidents.size})",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FioriError
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            field.incidents.forEach { incident ->
                                 Text(
-                                    text = "• ${incident.type}: ${incident.description}",
-                                    fontSize = 12.sp,
-                                    color = FioriDarkGray,
-                                    lineHeight = 16.sp
+                                    text = hazard.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-
-                        // Hazards
-                        if (field.hazards.isNotEmpty()) {
-                            Text(
-                                text = "⚡ Hazards (${field.hazards.size})",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = FioriWarning
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            field.hazards.forEach { hazard ->
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "•",
-                                        fontSize = 12.sp,
-                                        color = FioriDarkGray
-                                    )
-                                    Text(
-                                        text = hazard.name,
-                                        fontSize = 12.sp,
-                                        color = FioriDarkGray
-                                    )
-                                    Text(
-                                        text = "(${hazard.severity})",
-                                        fontSize = 11.sp,
-                                        color = when (hazard.severity) {
-                                            HazardSeverity.LOW -> FioriSuccess
-                                            HazardSeverity.MEDIUM -> FioriWarning
-                                            HazardSeverity.HIGH -> FioriError
-                                        }
-                                    )
-                                }
+                                Text(
+                                    text = "(${hazard.severity})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = when (hazard.severity) {
+                                        HazardSeverity.LOW -> SeverityLow
+                                        HazardSeverity.MEDIUM -> SeverityMedium
+                                        HazardSeverity.HIGH -> SeverityHigh
+                                    }
+                                )
                             }
                         }
                     }
@@ -578,8 +619,9 @@ fun FieldsScreen(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 16.dp, bottom = 16.dp),
-                    containerColor = FioriBlue,
-                    contentColor = FioriWhite
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -615,6 +657,8 @@ fun FieldsScreen(
                 AddFieldDialog(
                     existingField = fieldToEdit,
                     preSelectedCoordinates = if (fieldToEdit == null) selectedCoordinates else emptyList(),
+                    farms = farms,
+                    onAddFarm = { name, onCreated -> farmViewModel.addFarm(name, onCreated) },
                     onDismiss = {
                         showAddFieldDialog = false
                         fieldToEdit = null
@@ -630,13 +674,13 @@ fun FieldsScreen(
                             }
                         }
                     },
-                    onAddField = { newField ->
+                    onAddField = { newField, farmId ->
                         if (fieldToEdit != null) {
                             // Update existing field
                             fieldViewModel.updateField(newField)
                         } else {
-                            // Add new field
-                            fieldViewModel.addField(newField)
+                            // Add new field on the chosen farm
+                            fieldViewModel.addField(newField, farmId)
                         }
                         showAddFieldDialog = false
                         fieldToEdit = null
@@ -664,13 +708,13 @@ fun FieldsScreen(
                         Text(
                             text = "Delete Field",
                             fontWeight = FontWeight.Bold,
-                            color = FioriBlack
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     },
                     text = {
                         Text(
                             text = "Are you sure you want to delete this field? This action cannot be undone.",
-                            color = FioriDarkGray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     confirmButton = {
@@ -683,9 +727,10 @@ fun FieldsScreen(
                                 showDeleteConfirmation = false
                                 fieldToDelete = null
                             },
+                            shape = MaterialTheme.shapes.small,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = FioriError,
-                                contentColor = FioriWhite
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = Color.White
                             )
                         ) {
                             Text("Delete", fontWeight = FontWeight.Medium)
@@ -696,11 +741,11 @@ fun FieldsScreen(
                             showDeleteConfirmation = false
                             fieldToDelete = null
                         }) {
-                            Text("Cancel", color = FioriDarkGray, fontWeight = FontWeight.Medium)
+                            Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
                         }
                     },
-                    containerColor = FioriWhite,
-                    shape = RoundedCornerShape(20.dp)
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.large
                 )
             }
 
@@ -714,7 +759,11 @@ fun FieldsScreen(
 }
 
 /**
- * Add field polygons to the map using proper GeoJSON with risk-based colors
+ * Add field polygons to the map using proper GeoJSON with risk-based colors.
+ * Fields with 3+ coordinates render as filled polygons; fields with 1-2
+ * coordinates can't form a polygon, so they render as point markers (at their
+ * average position) so they're still visible and selectable. Fields with no
+ * coordinates are skipped (nothing to place).
  */
 private fun addFieldsToMap(style: Style, fields: List<Field>) {
     Log.d("FieldsScreen", "addFieldsToMap called with ${fields.size} fields")
@@ -728,86 +777,99 @@ private fun addFieldsToMap(style: Style, fields: List<Field>) {
         style.removeLayer(it)
         Log.d("FieldsScreen", "Removed existing border layer")
     }
+    style.getLayer("field-marker-layer")?.let { style.removeLayer(it) }
     style.getSource("fields-source")?.let {
         style.removeSource(it)
         Log.d("FieldsScreen", "Removed existing source")
     }
+    style.getSource("field-markers-source")?.let { style.removeSource(it) }
 
     if (fields.isEmpty()) {
         Log.w("FieldsScreen", "No fields to display")
         return
     }
 
+    // Risk -> color, shared by polygons and markers.
+    fun fillColorFor(field: Field): String = when (field.cultivationRisk) {
+        CultivationRisk.LOW -> "#107E3E"    // Green
+        CultivationRisk.MEDIUM -> "#E76500" // Orange
+        CultivationRisk.HIGH -> "#BB0000"   // Red
+        null -> "#107E3E"                   // Default green
+    }
+
+    fun Feature.tagWith(field: Field) = apply {
+        addStringProperty("id", field.id)
+        addStringProperty("region", field.region)
+        addStringProperty("cropType", field.name)
+        addStringProperty("risk", field.cultivationRisk?.name ?: "LOW")
+        addStringProperty("fillColor", fillColorFor(field))
+    }
+
+    val polygonFields = fields.filter { it.coordinates.size >= 3 }
+    val markerFields = fields.filter { it.coordinates.size in 1..2 }
+    fields.filter { it.coordinates.isEmpty() }.forEach {
+        Log.w("FieldsScreen", "Field ${it.id} has no coordinates; skipping (not drawable)")
+    }
+
     try {
-        // Create GeoJSON features from fields
-        val features = fields.mapIndexed { index, field ->
-            Log.d("FieldsScreen", "Processing field $index: ${field.id} with ${field.coordinates.size} coordinates")
-
-            // Convert coordinates to Point list for Polygon
-            val points = field.coordinates.map { coord ->
-                Point.fromLngLat(coord.longitude, coord.latitude)
-            }.toMutableList()
-
-            // Close the polygon by adding first point at the end
-            if (points.isNotEmpty()) {
-                points.add(points.first())
-                Log.d("FieldsScreen", "Field ${field.id} polygon closed with ${points.size} points")
+        if (polygonFields.isNotEmpty()) {
+            val features = polygonFields.map { field ->
+                val points = field.coordinates.map { coord ->
+                    Point.fromLngLat(coord.longitude, coord.latitude)
+                }.toMutableList()
+                points.add(points.first()) // close the ring
+                Feature.fromGeometry(Polygon.fromLngLats(listOf(points))).tagWith(field)
             }
 
-            // Create Polygon geometry
-            val polygon = Polygon.fromLngLats(listOf(points))
+            val geoJsonSource = GeoJsonSource("fields-source", FeatureCollection.fromFeatures(features))
+            style.addSource(geoJsonSource)
 
-            // Determine color based on risk level
-            val riskLevel = field.cultivationRisk?.name ?: "LOW"
-            val fillColor = when (field.cultivationRisk) {
-                CultivationRisk.LOW -> "#107E3E"    // Green
-                CultivationRisk.MEDIUM -> "#E76500" // Orange
-                CultivationRisk.HIGH -> "#BB0000"   // Red
-                null -> "#107E3E"                   // Default green
-            }
+            val fillLayer = FillLayer("field-fill-layer", "fields-source")
+            fillLayer.setProperties(
+                PropertyFactory.fillColor(
+                    org.maplibre.android.style.expressions.Expression.get("fillColor")
+                ),
+                PropertyFactory.fillOpacity(0.5f)
+            )
+            style.addLayer(fillLayer)
 
-            // Create Feature with properties including color
-            Feature.fromGeometry(polygon).apply {
-                addStringProperty("id", field.id)
-                addStringProperty("region", field.region)
-                addStringProperty("cropType", field.cultivation?.cropType ?: "Unknown")
-                addStringProperty("risk", riskLevel)
-                addStringProperty("fillColor", fillColor)
-            }
+            val borderLayer = LineLayer("field-border-layer", "fields-source")
+            borderLayer.setProperties(
+                PropertyFactory.lineColor(
+                    org.maplibre.android.style.expressions.Expression.get("fillColor")
+                ),
+                PropertyFactory.lineWidth(3f),
+                PropertyFactory.lineOpacity(0.9f)
+            )
+            style.addLayer(borderLayer)
+            Log.d("FieldsScreen", "Added ${features.size} polygon fields")
         }
 
-        Log.d("FieldsScreen", "Created ${features.size} features")
+        if (markerFields.isNotEmpty()) {
+            val markerFeatures = markerFields.map { field ->
+                val avgLat = field.coordinates.map { it.latitude }.average()
+                val avgLng = field.coordinates.map { it.longitude }.average()
+                Feature.fromGeometry(Point.fromLngLat(avgLng, avgLat)).tagWith(field)
+            }
 
-        // Create FeatureCollection
-        val featureCollection = FeatureCollection.fromFeatures(features)
-
-        // Add GeoJSON source
-        val geoJsonSource = GeoJsonSource("fields-source", featureCollection)
-        style.addSource(geoJsonSource)
-        Log.d("FieldsScreen", "Added GeoJSON source")
-
-        // Add fill layer for field polygons with data-driven color
-        val fillLayer = FillLayer("field-fill-layer", "fields-source")
-        fillLayer.setProperties(
-            PropertyFactory.fillColor(
-                org.maplibre.android.style.expressions.Expression.get("fillColor")
-            ),
-            PropertyFactory.fillOpacity(0.5f)
-        )
-        style.addLayer(fillLayer)
-        Log.d("FieldsScreen", "Added fill layer with risk-based colors")
-
-        // Add border layer for field boundaries with matching color
-        val borderLayer = LineLayer("field-border-layer", "fields-source")
-        borderLayer.setProperties(
-            PropertyFactory.lineColor(
-                org.maplibre.android.style.expressions.Expression.get("fillColor")
-            ),
-            PropertyFactory.lineWidth(3f),
-            PropertyFactory.lineOpacity(0.9f)
-        )
-        style.addLayer(borderLayer)
-        Log.d("FieldsScreen", "Added border layer - fields should now be visible with risk colors!")
+            style.addSource(
+                GeoJsonSource("field-markers-source", FeatureCollection.fromFeatures(markerFeatures))
+            )
+            val markerLayer = org.maplibre.android.style.layers.CircleLayer(
+                "field-marker-layer", "field-markers-source"
+            )
+            markerLayer.setProperties(
+                PropertyFactory.circleColor(
+                    org.maplibre.android.style.expressions.Expression.get("fillColor")
+                ),
+                PropertyFactory.circleRadius(8f),
+                PropertyFactory.circleStrokeColor("#FFFFFF"),
+                PropertyFactory.circleStrokeWidth(2f),
+                PropertyFactory.circleOpacity(0.9f)
+            )
+            style.addLayer(markerLayer)
+            Log.d("FieldsScreen", "Added ${markerFeatures.size} point-marker fields (<3 coords)")
+        }
 
     } catch (e: Exception) {
         Log.e("FieldsScreen", "Error adding fields to map", e)
@@ -816,12 +878,14 @@ private fun addFieldsToMap(style: Style, fields: List<Field>) {
 }
 
 /**
- * Remove field polygons from the map
+ * Remove field polygons and markers from the map
  */
 private fun removeFieldsFromMap(style: Style) {
     style.getLayer("field-fill-layer")?.let { style.removeLayer(it) }
     style.getLayer("field-border-layer")?.let { style.removeLayer(it) }
+    style.getLayer("field-marker-layer")?.let { style.removeLayer(it) }
     style.getSource("fields-source")?.let { style.removeSource(it) }
+    style.getSource("field-markers-source")?.let { style.removeSource(it) }
 }
 
 /**
@@ -849,7 +913,7 @@ private fun updateSelectionMarkers(style: Style, coordinates: List<com.mobile.sa
         val markerLayer = org.maplibre.android.style.layers.CircleLayer("selection-markers-layer", "selection-markers-source")
         markerLayer.setProperties(
             PropertyFactory.circleRadius(10f),
-            PropertyFactory.circleColor("#1B5EBE"), // FioriBlue
+            PropertyFactory.circleColor("#2E7D46"), // Leaf
             PropertyFactory.circleStrokeWidth(3f),
             PropertyFactory.circleStrokeColor("#FFFFFF")
         )
@@ -874,7 +938,7 @@ private fun updateSelectionMarkers(style: Style, coordinates: List<com.mobile.sa
             // Add polygon fill layer
             val fillLayer = FillLayer("selection-polygon-fill", "selection-polygon-source")
             fillLayer.setProperties(
-                PropertyFactory.fillColor("#1B5EBE"),
+                PropertyFactory.fillColor("#2E7D46"),
                 PropertyFactory.fillOpacity(0.3f)
             )
             style.addLayer(fillLayer)
@@ -882,7 +946,7 @@ private fun updateSelectionMarkers(style: Style, coordinates: List<com.mobile.sa
             // Add polygon border layer
             val borderLayer = LineLayer("selection-polygon-border", "selection-polygon-source")
             borderLayer.setProperties(
-                PropertyFactory.lineColor("#1B5EBE"),
+                PropertyFactory.lineColor("#2E7D46"),
                 PropertyFactory.lineWidth(3f),
                 PropertyFactory.lineOpacity(0.8f)
             )
@@ -911,40 +975,38 @@ fun CoordinateSelectionOverlay(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = FioriWhite
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        shape = RoundedCornerShape(16.dp)
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Tap the map to select field corners",
-                fontSize = 16.sp,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = FioriBlack
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Tap a marker to remove it",
-                fontSize = 13.sp,
-                color = FioriDarkGray,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Normal
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "$selectedCount point${if (selectedCount != 1) "s" else ""} selected ${if (selectedCount < 3) "(minimum 3 required)" else ""}",
-                fontSize = 14.sp,
-                color = if (selectedCount < 3) FioriWarning else FioriSuccess,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selectedCount < 3) Warning else Success,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -955,10 +1017,11 @@ fun CoordinateSelectionOverlay(
                 OutlinedButton(
                     onClick = onCancel,
                     modifier = Modifier.weight(1f),
+                    shape = MaterialTheme.shapes.small,
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = FioriDarkGray
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, FioriGray)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Text("Cancel", fontWeight = FontWeight.Medium)
                 }
@@ -966,11 +1029,12 @@ fun CoordinateSelectionOverlay(
                     onClick = onContinue,
                     modifier = Modifier.weight(1f),
                     enabled = selectedCount >= 3,
+                    shape = MaterialTheme.shapes.small,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = FioriBlue,
-                        contentColor = FioriWhite,
-                        disabledContainerColor = FioriGray,
-                        disabledContentColor = FioriDarkGray
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.outline,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
                     Text("Continue", fontWeight = FontWeight.Medium)
@@ -985,16 +1049,16 @@ fun CoordinateSelectionOverlay(
 fun AddFieldDialog(
     existingField: Field? = null,
     preSelectedCoordinates: List<com.mobile.sap.data.model.Coordinate> = emptyList(),
+    farms: List<com.mobile.sap.data.api.dto.FarmDto> = emptyList(),
+    onAddFarm: (String, (Long) -> Unit) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
-    onAddField: (Field) -> Unit
+    onAddField: (Field, Long) -> Unit
 ) {
     val isEditing = existingField != null
     var region by remember { mutableStateOf(existingField?.region ?: "") }
-    var cropType by remember { mutableStateOf(existingField?.cultivation?.cropType ?: "") }
-    var season by remember { mutableStateOf(existingField?.cultivation?.season ?: "") }
-    var status by remember { mutableStateOf(existingField?.cultivation?.status ?: "") }
+    var fieldName by remember { mutableStateOf(existingField?.name?.takeIf { it != "Field" } ?: "") }
+    var selectedFarmId by remember { mutableStateOf(farms.firstOrNull()?.ID) }
     var guideline by remember { mutableStateOf(existingField?.cultivationGuideline ?: "") }
-    var riskLevel by remember { mutableStateOf(existingField?.cultivationRisk?.name ?: "LOW") }
     var coordinatesText by remember {
         mutableStateOf(
             when {
@@ -1007,24 +1071,22 @@ fun AddFieldDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coordinatesReadOnly = preSelectedCoordinates.isNotEmpty() || isEditing
 
-    AlertDialog(
+    // Inline "add new farm" flow from the farm dropdown.
+    var showAddFarm by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f)
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Card(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp)
-                .heightIn(max = 600.dp),
-            colors = CardDefaults.cardColors(containerColor = FioriWhite),
-            shape = RoundedCornerShape(20.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp)
-            ) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1033,129 +1095,51 @@ fun AddFieldDialog(
                 ) {
                     Text(
                         text = if (isEditing) "Edit Field" else "Add New Field",
-                        fontSize = 20.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = FioriBlack
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = FioriDarkGray
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Region field
-                OutlinedTextField(
-                    value = region,
-                    onValueChange = { region = it; errorMessage = null },
-                    label = { Text("Region *", color = FioriDarkGray) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FioriBlue,
-                        focusedLabelColor = FioriBlue,
-                        unfocusedBorderColor = FioriGray,
-                        unfocusedLabelColor = FioriDarkGray,
-                        focusedTextColor = FioriBlack,
-                        unfocusedTextColor = FioriBlack
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Crop Type
-                OutlinedTextField(
-                    value = cropType,
-                    onValueChange = { cropType = it },
-                    label = { Text("Crop Type *", color = FioriDarkGray) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FioriBlue,
-                        focusedLabelColor = FioriBlue,
-                        unfocusedBorderColor = FioriGray,
-                        unfocusedLabelColor = FioriDarkGray,
-                        focusedTextColor = FioriBlack,
-                        unfocusedTextColor = FioriBlack
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Season and Status in a row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = season,
-                        onValueChange = { season = it },
-                        label = { Text("Season *", color = FioriDarkGray) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FioriBlue,
-                            focusedLabelColor = FioriBlue,
-                            unfocusedBorderColor = FioriGray,
-                            unfocusedLabelColor = FioriDarkGray,
-                            focusedTextColor = FioriBlack,
-                            unfocusedTextColor = FioriBlack
-                        )
-                    )
-                    OutlinedTextField(
-                        value = status,
-                        onValueChange = { status = it },
-                        label = { Text("Status *", color = FioriDarkGray) },
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FioriBlue,
-                            focusedLabelColor = FioriBlue,
-                            unfocusedBorderColor = FioriGray,
-                            unfocusedLabelColor = FioriDarkGray,
-                            focusedTextColor = FioriBlack,
-                            unfocusedTextColor = FioriBlack
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Risk Level Dropdown
-                var expandedRisk by remember { mutableStateOf(false) }
+                // Region dropdown (Cameroon's 10 regions)
+                var expandedRegion by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
-                    expanded = expandedRisk,
-                    onExpandedChange = { expandedRisk = it }
+                    expanded = expandedRegion,
+                    onExpandedChange = { expandedRegion = it }
                 ) {
                     OutlinedTextField(
-                        value = riskLevel,
+                        value = region,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Risk Level", color = FioriDarkGray) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRisk) },
+                        label = { Text("Region *", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        shape = MaterialTheme.shapes.small,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRegion) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FioriBlue,
-                            focusedLabelColor = FioriBlue,
-                            unfocusedBorderColor = FioriGray,
-                            unfocusedLabelColor = FioriDarkGray,
-                            focusedTextColor = FioriBlack,
-                            unfocusedTextColor = FioriBlack,
-                            disabledTextColor = FioriBlack
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface
                         )
                     )
                     ExposedDropdownMenu(
-                        expanded = expandedRisk,
-                        onDismissRequest = { expandedRisk = false }
+                        expanded = expandedRegion,
+                        onDismissRequest = { expandedRegion = false }
                     ) {
-                        listOf("LOW", "MEDIUM", "HIGH").forEach { risk ->
+                        com.mobile.sap.data.model.CameroonRegions.names.forEach { regionName ->
                             DropdownMenuItem(
-                                text = { Text(risk, color = FioriBlack) },
+                                text = { Text(regionName, color = MaterialTheme.colorScheme.onSurface) },
                                 onClick = {
-                                    riskLevel = risk
-                                    expandedRisk = false
+                                    region = regionName
+                                    errorMessage = null
+                                    expandedRegion = false
                                 }
                             )
                         }
@@ -1164,20 +1148,115 @@ fun AddFieldDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // Field name
+                OutlinedTextField(
+                    value = fieldName,
+                    onValueChange = { fieldName = it; errorMessage = null },
+                    label = { Text("Field Name *", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Farm dropdown (the caller's farms). Editing keeps the field on
+                // its current farm — the picker only applies when creating.
+                if (!isEditing) {
+                    var expandedFarm by remember { mutableStateOf(false) }
+                    val selectedFarmName = farms.firstOrNull { it.ID == selectedFarmId }?.name
+                        ?: "Select a farm"
+                    ExposedDropdownMenuBox(
+                        expanded = expandedFarm,
+                        onExpandedChange = { expandedFarm = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedFarmName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Farm *", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            shape = MaterialTheme.shapes.small,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedFarm) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedFarm,
+                            onDismissRequest = { expandedFarm = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Add new farm", color = MaterialTheme.colorScheme.primary)
+                                    }
+                                },
+                                onClick = {
+                                    expandedFarm = false
+                                    showAddFarm = true
+                                }
+                            )
+                            if (farms.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("No farms — create one in the Farms tab", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = { expandedFarm = false }
+                                )
+                            } else {
+                                farms.forEach { farm ->
+                                    DropdownMenuItem(
+                                        text = { Text(farm.name ?: "Unnamed farm", color = MaterialTheme.colorScheme.onSurface) },
+                                        onClick = {
+                                            selectedFarmId = farm.ID
+                                            errorMessage = null
+                                            expandedFarm = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 // Guideline
                 OutlinedTextField(
                     value = guideline,
                     onValueChange = { guideline = it },
-                    label = { Text("Cultivation Guideline", color = FioriDarkGray) },
+                    label = { Text("Notes", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FioriBlue,
-                        focusedLabelColor = FioriBlue,
-                        unfocusedBorderColor = FioriGray,
-                        unfocusedLabelColor = FioriDarkGray,
-                        focusedTextColor = FioriBlack,
-                        unfocusedTextColor = FioriBlack
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
 
@@ -1190,24 +1269,25 @@ fun AddFieldDialog(
                     label = {
                         Text(
                             text = if (coordinatesReadOnly) "Coordinates (from map selection) *" else "Coordinates (lat,lng; lat,lng; ...) *",
-                            color = FioriDarkGray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3,
                     readOnly = coordinatesReadOnly,
                     enabled = !coordinatesReadOnly,
-                    placeholder = { if (!coordinatesReadOnly) Text("3.850,11.500; 3.851,11.502; ...", color = FioriGray) },
+                    placeholder = { if (!coordinatesReadOnly) Text("3.850,11.500; 3.851,11.502; ...", color = MaterialTheme.colorScheme.outline) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FioriBlue,
-                        focusedLabelColor = FioriBlue,
-                        unfocusedBorderColor = FioriGray,
-                        unfocusedLabelColor = FioriDarkGray,
-                        focusedTextColor = FioriBlack,
-                        unfocusedTextColor = FioriBlack,
-                        disabledTextColor = FioriDarkGray,
-                        disabledBorderColor = FioriGray,
-                        disabledLabelColor = FioriDarkGray
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
 
@@ -1215,8 +1295,8 @@ fun AddFieldDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = errorMessage!!,
-                        color = FioriError,
-                        fontSize = 12.sp
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
 
@@ -1229,15 +1309,19 @@ fun AddFieldDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = FioriDarkGray, fontWeight = FontWeight.Medium)
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             // Validate required fields
-                            if (region.isBlank() || cropType.isBlank() || season.isBlank() ||
-                                status.isBlank() || coordinatesText.isBlank()) {
+                            if (region.isBlank() || fieldName.isBlank() || coordinatesText.isBlank()) {
                                 errorMessage = "Please fill all required fields"
+                                return@Button
+                            }
+                            val farmId = if (isEditing) 0L else selectedFarmId
+                            if (!isEditing && farmId == null) {
+                                errorMessage = "Please select a farm"
                                 return@Button
                             }
 
@@ -1260,35 +1344,84 @@ fun AddFieldDialog(
                                 // Create or update field object
                                 val newField = com.mobile.sap.data.model.Field(
                                     id = existingField?.id ?: java.util.UUID.randomUUID().toString(),
+                                    name = fieldName.trim(),
                                     region = region,
                                     coordinates = coordinates,
-                                    cultivation = com.mobile.sap.data.model.Cultivation(
-                                        cropType = cropType,
-                                        season = season,
-                                        status = status
-                                    ),
                                     cultivationGuideline = guideline.ifBlank { null },
-                                    cultivationRisk = com.mobile.sap.data.model.CultivationRisk.valueOf(riskLevel),
-                                    incidents = existingField?.incidents ?: emptyList(),
-                                    hazards = existingField?.hazards ?: emptyList(),
-                                    fertilizers = existingField?.fertilizers ?: emptyList(),
                                     createdAt = existingField?.createdAt,
                                     updatedAt = existingField?.updatedAt
                                 )
 
-                                onAddField(newField)
+                                onAddField(newField, farmId ?: 0L)
                             } catch (e: Exception) {
                                 errorMessage = "Invalid coordinates format"
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = FioriBlue,
-                            contentColor = FioriWhite
-                        )
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.White
+                        ),
+                        shape = MaterialTheme.shapes.small
                     ) {
                         Text(if (isEditing) "Save Changes" else "Add Field", fontWeight = FontWeight.Medium)
                     }
                 }
+        }
+    }
+
+    if (showAddFarm) {
+        var newFarmName by remember { mutableStateOf("") }
+        val addFarmSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showAddFarm = false },
+            sheetState = addFarmSheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Text(
+                    text = "New farm",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = newFarmName,
+                    onValueChange = { newFarmName = it },
+                    label = { Text("Farm name", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                    )
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                PrimaryButton(
+                    text = "Add",
+                    onClick = {
+                        val name = newFarmName.trim()
+                        if (name.isNotEmpty()) {
+                            onAddFarm(name) { newId ->
+                                // Auto-select the freshly created farm.
+                                selectedFarmId = newId
+                                errorMessage = null
+                            }
+                            showAddFarm = false
+                        }
+                    },
+                    enabled = newFarmName.isNotBlank()
+                )
             }
         }
     }

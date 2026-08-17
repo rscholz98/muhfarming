@@ -78,9 +78,9 @@ class FieldViewModel(
         _selectedField.value = field
     }
 
-    fun addField(field: Field) {
+    fun addField(field: Field, farmId: Long) {
         viewModelScope.launch {
-            repository.createField(field).fold(
+            repository.createField(field, farmId).fold(
                 onSuccess = {
                     Log.d("FieldViewModel", "Field created; reloading")
                     loadAllFields()

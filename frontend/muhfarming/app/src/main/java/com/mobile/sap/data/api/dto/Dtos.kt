@@ -71,3 +71,124 @@ data class FieldCoordinateRequest(
     val sequenceOrder: Int,
     val fieldId: Long
 )
+
+// ---- Cultivation (reference data) ----
+
+data class CultivationDto(
+    val ID: Long = 0,
+    val name: String? = null,
+    val estTimeToHarvestWeeks: Int = 0
+)
+
+data class CultivationRequest(
+    val name: String,
+    val estTimeToHarvestWeeks: Int = 0
+)
+
+// ---- Hazard (reference data) ----
+
+data class HazardDto(
+    val ID: Long = 0,
+    val name: String? = null,
+    val description: String? = null
+)
+
+data class HazardRequest(
+    val name: String,
+    val description: String
+)
+
+// ---- Fertilizer (reference data, read-only in UI) ----
+
+data class FertilizerDto(
+    val ID: Long = 0,
+    val name: String? = null
+)
+
+// ---- CultivationGuideline ----
+
+data class CultivationGuidelineDto(
+    val ID: Long = 0,
+    val type: String? = null,
+    val weekFrom: Int = 0,
+    val weekTo: Int = 0,
+    val instructions: String? = null,
+    val cultivationId: Long = 0,
+    val fertilizerId: Long? = null,
+    val fertilizer: FertilizerDto? = null
+)
+
+data class CultivationGuidelineRequest(
+    val type: String? = null,
+    val weekFrom: Int = 0,
+    val weekTo: Int = 0,
+    val instructions: String? = null,
+    val cultivationId: Long,
+    val fertilizerId: Long? = null
+)
+
+// ---- CultivationRisk ----
+
+data class CultivationRiskDto(
+    val ID: Long = 0,
+    val weekFrom: Int = 0,
+    val weekTo: Int = 0,
+    val solution: String? = null,
+    val cultivationId: Long = 0,
+    val hazardId: Long = 0,
+    val hazard: HazardDto? = null
+)
+
+data class CultivationRiskRequest(
+    val weekFrom: Int = 0,
+    val weekTo: Int = 0,
+    val solution: String? = null,
+    val cultivationId: Long,
+    val hazardId: Long
+)
+
+// ---- Incident ----
+
+data class IncidentDto(
+    val ID: Long = 0,
+    val date: String? = null,
+    val priority: String? = null,
+    val description: String? = null,
+    val cultivationRiskId: Long = 0,
+    val regionId: Long = 0,
+    val region: RegionDto? = null
+)
+
+data class IncidentRequest(
+    val date: String? = null,
+    val priority: String? = null,
+    val description: String? = null,
+    val cultivationRiskId: Long,
+    val regionId: Long
+)
+
+// ---- Alert ----
+
+data class AlertDto(
+    val ID: Long = 0,
+    val fieldId: Long = 0,
+    val field: FieldDto? = null,
+    val incidentId: Long = 0,
+    val incident: IncidentDto? = null
+)
+
+data class AlertRequest(
+    val fieldId: Long,
+    val incidentId: Long
+)
+
+// ---- Crop ----
+
+data class CropDto(
+    val ID: Long = 0,
+    val status: String? = null,
+    val datePlanted: String? = null,
+    val lastUpdated: String? = null,
+    val fieldId: Long = 0,
+    val cultivationId: Long = 0
+)
