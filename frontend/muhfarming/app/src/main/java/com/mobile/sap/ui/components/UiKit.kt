@@ -2,10 +2,13 @@ package com.mobile.sap.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -18,6 +21,39 @@ import androidx.compose.ui.unit.dp
  * shares one modern visual language: a brand gradient header, soft elevated
  * cards, pill chips, section labels, and a friendly empty state.
  */
+
+/**
+ * A tappable icon with no ripple / press indication — used for inline row
+ * edit / delete affordances where the Material ripple felt too heavy. Keeps a
+ * 36dp touch target with a 20dp icon by default, matching the row icon sizing.
+ */
+@Composable
+fun NoRippleIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    boxSize: Int = 36,
+    iconSize: Int = 20
+) {
+    Box(
+        modifier = Modifier
+            .size(boxSize.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(iconSize.dp)
+        )
+    }
+}
 
 /** A compact, solid app header used at the top of primary screens. */
 @Composable

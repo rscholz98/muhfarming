@@ -271,22 +271,17 @@ private fun AlertCard(
                     )
                 }
                 if (isAdmin) {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit alert",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Remove alert",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    NoRippleIconButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = "Edit alert",
+                        onClick = onEdit
+                    )
+                    NoRippleIconButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = "Remove alert",
+                        onClick = onDelete,
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             }
             av.incident?.description?.takeIf { it.isNotBlank() }?.let {

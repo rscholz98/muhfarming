@@ -39,6 +39,7 @@ import com.mobile.sap.data.repository.CultivationGuide
 import com.mobile.sap.data.repository.GuidelineView
 import com.mobile.sap.data.repository.RiskView
 import com.mobile.sap.ui.components.EmptyState
+import com.mobile.sap.ui.components.NoRippleIconButton
 import com.mobile.sap.ui.components.SectionLabel
 import com.mobile.sap.ui.theme.*
 import com.mobile.sap.ui.viewmodel.CultivationUiState
@@ -292,14 +293,11 @@ private fun CultivationCard(
                     }
                 }
                 if (isAdmin) {
-                    IconButton(onClick = onEditCultivation, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit cultivation",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    NoRippleIconButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = "Edit cultivation",
+                        onClick = onEditCultivation
+                    )
                 }
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -387,14 +385,11 @@ private fun GuidelineRow(view: GuidelineView, onEdit: (() -> Unit)? = null) {
             }
         }
         if (onEdit != null) {
-            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit guideline",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            NoRippleIconButton(
+                icon = Icons.Default.Edit,
+                contentDescription = "Edit guideline",
+                onClick = onEdit
+            )
         }
     }
 }
@@ -440,14 +435,11 @@ private fun RiskRow(view: RiskView, onEdit: (() -> Unit)? = null) {
             }
         }
         if (onEdit != null) {
-            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit risk",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            NoRippleIconButton(
+                icon = Icons.Default.Edit,
+                contentDescription = "Edit risk",
+                onClick = onEdit
+            )
         }
     }
 }

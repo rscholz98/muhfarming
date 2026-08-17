@@ -15,7 +15,8 @@ enum class DataChange {
     Guideline,
     Risk,
     Incident,
-    Alert
+    Alert,
+    Farm
 }
 
 /**

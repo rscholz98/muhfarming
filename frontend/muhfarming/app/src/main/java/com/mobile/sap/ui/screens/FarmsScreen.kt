@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mobile.sap.data.api.dto.FarmDto
 import com.mobile.sap.ui.components.EmptyState
+import com.mobile.sap.ui.components.NoRippleIconButton
 import com.mobile.sap.ui.components.PrimaryButton
 import com.mobile.sap.ui.viewmodel.FarmUiState
 import com.mobile.sap.ui.viewmodel.FarmViewModel
@@ -173,28 +174,17 @@ private fun FarmRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(
-                onClick = onEdit,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            IconButton(
+            NoRippleIconButton(
+                icon = Icons.Default.Edit,
+                contentDescription = "Edit",
+                onClick = onEdit
+            )
+            NoRippleIconButton(
+                icon = Icons.Default.Delete,
+                contentDescription = "Delete",
                 onClick = onDelete,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+                tint = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

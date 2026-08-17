@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mobile.sap.data.api.dto.FarmDto
+import com.mobile.sap.data.event.DataChange
+import com.mobile.sap.data.event.DataEvents
 import com.mobile.sap.data.repository.FarmRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,14 @@ class FarmViewModel(
 
     init {
         loadFarms()
+        // Live refresh when a farm is created/renamed/removed anywhere in the
+        // app, so e.g. the map's farm filter chips and the field sheet's farm
+        // dropdown (backed by a separate FarmViewModel instance) stay in sync.
+        viewModelScope.launch {
+            DataEvents.events.collect { change ->
+                if (change == DataChange.Farm) loadFarms()
+            }
+        }
     }
 
     fun loadFarms() {

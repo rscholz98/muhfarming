@@ -415,46 +415,30 @@ fun FieldsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (isAdmin) {
-                                IconButton(
+                                NoRippleIconButton(
+                                    icon = Icons.Default.Edit,
+                                    contentDescription = "Edit Field",
                                     onClick = {
                                         fieldToEdit = field
                                         showAddFieldDialog = true
                                     },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Edit Field",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                IconButton(
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                NoRippleIconButton(
+                                    icon = Icons.Default.Delete,
+                                    contentDescription = "Delete Field",
                                     onClick = {
                                         fieldToDelete = field
                                         showDeleteConfirmation = true
                                     },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Field",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = { fieldViewModel.selectField(null) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                             }
+                            NoRippleIconButton(
+                                icon = Icons.Default.Close,
+                                contentDescription = "Close",
+                                onClick = { fieldViewModel.selectField(null) }
+                            )
                         }
                     }
 
