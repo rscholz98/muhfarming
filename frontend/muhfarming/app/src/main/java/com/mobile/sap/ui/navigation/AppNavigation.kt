@@ -48,6 +48,29 @@ fun AppNavigation() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // Clears the session and returns to the login screen. Used by the manual
+    // Settings logout and by the forced logout when the backend rejects the token.
+    val performLogout: () -> Unit = {
+        session.clear()
+        isLoggedIn = false
+        isAdmin = false
+        navController.navigate(Screen.Login.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                inclusive = true
+            }
+            launchSingleTop = true
+        }
+    }
+
+    // Force a logout when the network layer reports an unauthorized (401)
+    // response, e.g. an expired or revoked token. Only act while logged in so a
+    // 401 already on the login screen doesn't loop.
+    LaunchedEffect(Unit) {
+        com.mobile.sap.data.event.AuthEvents.unauthorized.collect {
+            if (isLoggedIn) performLogout()
+        }
+    }
+
     // Only show bottom bar if logged in and not on login screen
     val showBottomBar = isLoggedIn && currentRoute != Screen.Login.route
 
@@ -150,16 +173,7 @@ fun AppNavigation() {
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     weatherViewModel = weatherViewModel,
-                    onLogout = {
-                        session.clear()
-                        isLoggedIn = false
-                        isAdmin = false
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                inclusive = true
-                            }
-                        }
-                    }
+                    onLogout = performLogout
                 )
             }
         }

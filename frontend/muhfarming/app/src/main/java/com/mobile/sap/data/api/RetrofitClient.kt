@@ -1,6 +1,7 @@
 package com.mobile.sap.data.api
 
 import com.mobile.sap.data.auth.SessionManager
+import com.mobile.sap.data.event.AuthEvents
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -42,8 +43,27 @@ object RetrofitClient {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    // Detects an expired/invalid session: any 401 on a non-auth route means the
+    // stored token is no longer accepted by the backend. Clear it and signal the
+    // UI to force a logout. The login/signup routes are exempt — a 401 there is
+    // just "bad credentials", not a dead session.
+    private val unauthorizedInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (response.code == 401 && !chain.request().isAuthRoute()) {
+            session?.clear()
+            AuthEvents.emitUnauthorized()
+        }
+        response
+    }
+
+    private fun okhttp3.Request.isAuthRoute(): Boolean {
+        val path = url.encodedPath
+        return path.endsWith("/auth/login") || path.endsWith("/auth/signup")
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
+        .addInterceptor(unauthorizedInterceptor)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
