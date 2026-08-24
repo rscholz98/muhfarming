@@ -6,8 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +55,70 @@ fun NoRippleIconButton(
             tint = tint,
             modifier = Modifier.size(iconSize.dp)
         )
+    }
+}
+
+/**
+ * Wraps a row/card so it can be swiped from right-to-left (end→start) to
+ * trigger [onDelete]. Reveals a red delete background with a trash icon while
+ * swiping. Because deletion is destructive, [onDelete] is expected to open a
+ * confirmation dialog rather than delete immediately; the item animates back
+ * into place after the gesture so it stays visible until the user confirms.
+ *
+ * When [enabled] is false the content is rendered as-is with no swipe (used to
+ * gate the affordance behind admin).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDelete(
+    onDelete: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    if (!enabled) {
+        content()
+        return
+    }
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+            }
+            // Never actually dismiss here — the confirm dialog owns the outcome,
+            // so we snap back and let the reload remove the row if confirmed.
+            false
+        }
+    )
+    // If a gesture left the box settled off-center (e.g. the dialog was
+    // cancelled), ease it back to the resting position.
+    LaunchedEffect(state.currentValue) {
+        if (state.currentValue != SwipeToDismissBoxValue.Settled) {
+            state.reset()
+        }
+    }
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        MaterialTheme.colorScheme.error,
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onError
+                )
+            }
+        }
+    ) {
+        content()
     }
 }
 

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Grass
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,7 @@ import com.mobile.sap.data.repository.RiskView
 import com.mobile.sap.ui.components.EmptyState
 import com.mobile.sap.ui.components.NoRippleIconButton
 import com.mobile.sap.ui.components.SectionLabel
+import com.mobile.sap.ui.components.SwipeToDelete
 import com.mobile.sap.ui.theme.*
 import com.mobile.sap.ui.viewmodel.CultivationUiState
 import com.mobile.sap.ui.viewmodel.CultivationViewModel
@@ -63,6 +65,7 @@ fun CultivationGuideScreen(
     viewModel: CultivationViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val cultivations by viewModel.cultivations.collectAsState()
     val hazards by viewModel.hazards.collectAsState()
 
@@ -76,6 +79,11 @@ fun CultivationGuideScreen(
     var editingHazard by remember { mutableStateOf<HazardDto?>(null) }
     var editingGuideline by remember { mutableStateOf<CultivationGuidelineDto?>(null) }
     var editingRisk by remember { mutableStateOf<CultivationRiskDto?>(null) }
+
+    // Item pending deletion (admin only). Non-null shows a confirm dialog; the
+    // matching row is revealed by a swipe-left gesture.
+    var pendingDeleteGuideline by remember { mutableStateOf<CultivationGuidelineDto?>(null) }
+    var pendingDeleteRisk by remember { mutableStateOf<CultivationRiskDto?>(null) }
 
     // Surface create success / failure as snackbars.
     val snackbarHostState = remember { SnackbarHostState() }
@@ -108,7 +116,11 @@ fun CultivationGuideScreen(
             }
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
             when (val state = uiState) {
                 is CultivationUiState.Loading ->
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -116,7 +128,11 @@ fun CultivationGuideScreen(
                     }
 
                 is CultivationUiState.Error ->
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    // Scrollable so the pull gesture still works when errored.
+                    Box(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
                             state.message,
                             style = MaterialTheme.typography.bodyMedium,
@@ -126,7 +142,10 @@ fun CultivationGuideScreen(
 
                 is CultivationUiState.Success -> {
                     if (state.guides.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            contentAlignment = Alignment.Center
+                        ) {
                             EmptyState(
                                 icon = Icons.Outlined.Grass,
                                 title = "No cultivation guides",
@@ -147,7 +166,9 @@ fun CultivationGuideScreen(
                                     isAdmin = isAdmin,
                                     onEditCultivation = { editingCultivation = guide.cultivation },
                                     onEditGuideline = { editingGuideline = it },
-                                    onEditRisk = { editingRisk = it }
+                                    onEditRisk = { editingRisk = it },
+                                    onDeleteGuideline = { pendingDeleteGuideline = it },
+                                    onDeleteRisk = { pendingDeleteRisk = it }
                                 )
                             }
                         }
@@ -250,6 +271,47 @@ fun CultivationGuideScreen(
             }
         )
     }
+
+    // ---- Delete confirmation dialogs (admin only) ----
+
+    pendingDeleteGuideline?.let { g ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteGuideline = null },
+            title = { Text("Remove guideline?") },
+            text = {
+                Text(
+                    "“${g.type?.takeIf { it.isNotBlank() } ?: "This guideline"}” will be removed. " +
+                        "This can't be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteGuideline(g.ID)
+                    pendingDeleteGuideline = null
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteGuideline = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    pendingDeleteRisk?.let { r ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteRisk = null },
+            title = { Text("Remove risk?") },
+            text = { Text("This risk will be removed. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteRisk(r.ID)
+                    pendingDeleteRisk = null
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteRisk = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 private enum class AuthoringSheet { Hazard, Guideline, Risk }
@@ -262,7 +324,9 @@ private fun CultivationCard(
     isAdmin: Boolean = false,
     onEditCultivation: () -> Unit = {},
     onEditGuideline: (CultivationGuidelineDto) -> Unit = {},
-    onEditRisk: (CultivationRiskDto) -> Unit = {}
+    onEditRisk: (CultivationRiskDto) -> Unit = {},
+    onDeleteGuideline: (CultivationGuidelineDto) -> Unit = {},
+    onDeleteRisk: (CultivationRiskDto) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     Surface(
@@ -319,10 +383,15 @@ private fun CultivationCard(
                         )
                     } else {
                         guide.guidelines.forEach { view ->
-                            GuidelineRow(
-                                view = view,
-                                onEdit = if (isAdmin) ({ onEditGuideline(view.guideline) }) else null
-                            )
+                            SwipeToDelete(
+                                onDelete = { onDeleteGuideline(view.guideline) },
+                                enabled = isAdmin
+                            ) {
+                                GuidelineRow(
+                                    view = view,
+                                    onEdit = if (isAdmin) ({ onEditGuideline(view.guideline) }) else null
+                                )
+                            }
                         }
                     }
 
@@ -340,10 +409,15 @@ private fun CultivationCard(
                         )
                     } else {
                         guide.risks.forEach { view ->
-                            RiskRow(
-                                view = view,
-                                onEdit = if (isAdmin) ({ onEditRisk(view.risk) }) else null
-                            )
+                            SwipeToDelete(
+                                onDelete = { onDeleteRisk(view.risk) },
+                                enabled = isAdmin
+                            ) {
+                                RiskRow(
+                                    view = view,
+                                    onEdit = if (isAdmin) ({ onEditRisk(view.risk) }) else null
+                                )
+                            }
                         }
                     }
                 }

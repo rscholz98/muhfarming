@@ -12,10 +12,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +50,7 @@ fun AlertsScreen(
     viewModel: AlertViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val selectedRegionIds by viewModel.selectedRegionIds.collectAsState()
     val fields by viewModel.fields.collectAsState()
     val incidents by viewModel.incidents.collectAsState()
@@ -134,43 +135,60 @@ fun AlertsScreen(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            when (val state = uiState) {
-                is AlertUiState.Loading ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-
-                is AlertUiState.Error ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(state.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-
-                is AlertUiState.Success -> {
-                    // Client-side region filter: show an alert if its field's region
-                    // is selected, or if it has no resolvable region.
-                    val visible = state.alerts.filter { av ->
-                        av.regionId == null || av.regionId in selected
-                    }
-                    if (visible.isEmpty()) {
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = { viewModel.refresh() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when (val state = uiState) {
+                    is AlertUiState.Loading ->
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            EmptyState(
-                                icon = Icons.Outlined.Notifications,
-                                title = "No alerts",
-                                subtitle = "No alerts for the selected regions."
-                            )
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+
+                    is AlertUiState.Error ->
+                        // Scrollable so the pull gesture still works when empty/errored.
+                        Box(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            contentAlignment = Alignment.Center
                         ) {
-                            items(visible, key = { it.alert.ID }) { av ->
-                                AlertCard(
-                                    av = av,
-                                    isAdmin = isAdmin,
-                                    onEdit = { viewModel.refreshReferenceData(); editingAlert = av },
-                                    onDelete = { pendingDelete = av }
+                            Text(state.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                    is AlertUiState.Success -> {
+                        // Client-side region filter: show an alert if its field's region
+                        // is selected, or if it has no resolvable region.
+                        val visible = state.alerts.filter { av ->
+                            av.regionId == null || av.regionId in selected
+                        }
+                        if (visible.isEmpty()) {
+                            Box(
+                                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyState(
+                                    icon = Icons.Outlined.Notifications,
+                                    title = "No alerts",
+                                    subtitle = "No alerts for the selected regions."
                                 )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(visible, key = { it.alert.ID }) { av ->
+                                    SwipeToDelete(
+                                        onDelete = { pendingDelete = av },
+                                        enabled = isAdmin
+                                    ) {
+                                        AlertCard(
+                                            av = av,
+                                            isAdmin = isAdmin,
+                                            onEdit = { viewModel.refreshReferenceData(); editingAlert = av }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -243,8 +261,7 @@ private fun priorityColor(priority: String?): Color = when (priority?.trim()?.lo
 private fun AlertCard(
     av: AlertView,
     isAdmin: Boolean = false,
-    onEdit: () -> Unit = {},
-    onDelete: () -> Unit = {}
+    onEdit: () -> Unit = {}
 ) {
     val regionName = av.regionId?.let { CameroonRegions.nameForId(it) }
     Card(
@@ -275,12 +292,6 @@ private fun AlertCard(
                         icon = Icons.Default.Edit,
                         contentDescription = "Edit alert",
                         onClick = onEdit
-                    )
-                    NoRippleIconButton(
-                        icon = Icons.Default.Delete,
-                        contentDescription = "Remove alert",
-                        onClick = onDelete,
-                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }

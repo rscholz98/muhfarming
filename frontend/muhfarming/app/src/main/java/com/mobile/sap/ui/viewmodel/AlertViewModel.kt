@@ -33,6 +33,12 @@ class AlertViewModel(
     private val _uiState = MutableStateFlow<AlertUiState>(AlertUiState.Loading)
     val uiState: StateFlow<AlertUiState> = _uiState.asStateFlow()
 
+    // True while a user-initiated pull-to-refresh is in flight. Kept separate
+    // from the full-screen Loading state so the pull indicator, not the
+    // centered spinner, shows during a refresh.
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     // Selected region ids for the local filter. Null until first load so we can
     // seed it with the regions of the user's own fields (the default).
     private val _selectedRegionIds = MutableStateFlow<Set<Long>?>(null)
@@ -73,23 +79,40 @@ class AlertViewModel(
     fun load() {
         viewModelScope.launch {
             _uiState.value = AlertUiState.Loading
-            repository.load().fold(
-                onSuccess = { bundle ->
-                    _uiState.value = AlertUiState.Success(bundle.alerts)
-                    // Seed the filter with the user's field regions on first load only.
-                    if (_selectedRegionIds.value == null) {
-                        _selectedRegionIds.value = bundle.userFieldRegionIds
-                    }
-                },
-                onFailure = { e ->
-                    Log.e("AlertViewModel", "Error loading alerts", e)
-                    _uiState.value = AlertUiState.Error(e.message ?: "Unknown error occurred")
-                }
-            )
-            repository.listFields().onSuccess { _fields.value = it }
-            repository.listIncidents().onSuccess { _incidents.value = it }
-            repository.listCultivationRisks().onSuccess { _cultivationRisks.value = it }
+            fetch()
         }
+    }
+
+    /**
+     * User-initiated pull-to-refresh: re-fetch without resetting the screen to
+     * the full-screen Loading state, driving the pull indicator via
+     * [isRefreshing] instead.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetch()
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetch() {
+        repository.load().fold(
+            onSuccess = { bundle ->
+                _uiState.value = AlertUiState.Success(bundle.alerts)
+                // Seed the filter with the user's field regions on first load only.
+                if (_selectedRegionIds.value == null) {
+                    _selectedRegionIds.value = bundle.userFieldRegionIds
+                }
+            },
+            onFailure = { e ->
+                Log.e("AlertViewModel", "Error loading alerts", e)
+                _uiState.value = AlertUiState.Error(e.message ?: "Unknown error occurred")
+            }
+        )
+        repository.listFields().onSuccess { _fields.value = it }
+        repository.listIncidents().onSuccess { _incidents.value = it }
+        repository.listCultivationRisks().onSuccess { _cultivationRisks.value = it }
     }
 
     /**

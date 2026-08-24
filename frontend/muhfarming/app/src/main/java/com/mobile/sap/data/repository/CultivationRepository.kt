@@ -231,4 +231,32 @@ class CultivationRepository(
                 Result.failure(Exception("Network error while updating risk."))
             }
         }
+
+    // ---- Admin-only deletes (backend 403s for non-admins) ----
+
+    suspend fun deleteGuideline(id: Long): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val resp = api.deleteCultivationGuideline(id)
+                if (resp.isSuccessful) {
+                    DataEvents.emit(DataChange.Guideline)
+                    Result.success(Unit)
+                } else Result.failure(Exception("Failed to delete guideline (${resp.code()})"))
+            } catch (e: Exception) {
+                Result.failure(Exception("Network error while deleting guideline."))
+            }
+        }
+
+    suspend fun deleteRisk(id: Long): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val resp = api.deleteCultivationRisk(id)
+                if (resp.isSuccessful) {
+                    DataEvents.emit(DataChange.Risk)
+                    Result.success(Unit)
+                } else Result.failure(Exception("Failed to delete risk (${resp.code()})"))
+            } catch (e: Exception) {
+                Result.failure(Exception("Network error while deleting risk."))
+            }
+        }
 }

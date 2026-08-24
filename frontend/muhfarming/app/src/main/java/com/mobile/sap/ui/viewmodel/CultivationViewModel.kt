@@ -32,6 +32,12 @@ class CultivationViewModel(
     private val _uiState = MutableStateFlow<CultivationUiState>(CultivationUiState.Loading)
     val uiState: StateFlow<CultivationUiState> = _uiState.asStateFlow()
 
+    // True while a user-initiated pull-to-refresh is in flight. Kept separate
+    // from the full-screen Loading state so the pull indicator, not the
+    // centered spinner, shows during a refresh.
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     // Reference lists for the admin authoring dialogs.
     private val _cultivations = MutableStateFlow<List<CultivationDto>>(emptyList())
     val cultivations: StateFlow<List<CultivationDto>> = _cultivations.asStateFlow()
@@ -51,18 +57,35 @@ class CultivationViewModel(
     fun load() {
         viewModelScope.launch {
             _uiState.value = CultivationUiState.Loading
-            repository.loadGuides().fold(
-                onSuccess = { guides ->
-                    _uiState.value = CultivationUiState.Success(guides)
-                    _cultivations.value = guides.map { it.cultivation }
-                },
-                onFailure = { e ->
-                    Log.e("CultivationViewModel", "Error loading guides", e)
-                    _uiState.value = CultivationUiState.Error(e.message ?: "Unknown error occurred")
-                }
-            )
-            repository.listHazards().onSuccess { _hazards.value = it }
+            fetch()
         }
+    }
+
+    /**
+     * User-initiated pull-to-refresh: re-fetch without resetting the screen to
+     * the full-screen Loading state, driving the pull indicator via
+     * [isRefreshing] instead.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetch()
+            _isRefreshing.value = false
+        }
+    }
+
+    private suspend fun fetch() {
+        repository.loadGuides().fold(
+            onSuccess = { guides ->
+                _uiState.value = CultivationUiState.Success(guides)
+                _cultivations.value = guides.map { it.cultivation }
+            },
+            onFailure = { e ->
+                Log.e("CultivationViewModel", "Error loading guides", e)
+                _uiState.value = CultivationUiState.Error(e.message ?: "Unknown error occurred")
+            }
+        )
+        repository.listHazards().onSuccess { _hazards.value = it }
     }
 
     fun addCultivation(name: String, estTimeToHarvestWeeks: Int, onCreated: (Long) -> Unit = {}) {
@@ -187,6 +210,36 @@ class CultivationViewModel(
                 onFailure = { e ->
                     Log.e("CultivationViewModel", "Error updating risk", e)
                     _messages.tryEmit(e.message ?: "Failed to update risk")
+                }
+            )
+        }
+    }
+
+    fun deleteGuideline(id: Long) {
+        viewModelScope.launch {
+            repository.deleteGuideline(id).fold(
+                onSuccess = {
+                    _messages.tryEmit("Guideline removed")
+                    load()
+                },
+                onFailure = { e ->
+                    Log.e("CultivationViewModel", "Error deleting guideline", e)
+                    _messages.tryEmit(e.message ?: "Failed to remove guideline")
+                }
+            )
+        }
+    }
+
+    fun deleteRisk(id: Long) {
+        viewModelScope.launch {
+            repository.deleteRisk(id).fold(
+                onSuccess = {
+                    _messages.tryEmit("Risk removed")
+                    load()
+                },
+                onFailure = { e ->
+                    Log.e("CultivationViewModel", "Error deleting risk", e)
+                    _messages.tryEmit(e.message ?: "Failed to remove risk")
                 }
             )
         }
