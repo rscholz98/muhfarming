@@ -144,6 +144,33 @@ func toRecord(u User) auth.UserRecord {
 	}
 }
 
+// EnsureFarmer creates a farmer user if it does not already exist. Idempotent;
+// used to seed a default farmer from deployment environment variables.
+func (s *Store) EnsureFarmer(ctx context.Context, username, password string) error {
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&User{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return fmt.Errorf("hash farmer password: %w", err)
+	}
+	farmer := User{
+		Username:     username,
+		PasswordHash: hash,
+		Name:         "Farmer",
+		Email:        "",
+		Role:         auth.RoleFarmer,
+	}
+	if err := s.db.WithContext(ctx).Create(&farmer).Error; err != nil {
+		return fmt.Errorf("create farmer failed: %w", err)
+	}
+	return nil
+}
+
 // EnsureAdmin creates the admin user if it does not already exist. Idempotent;
 // used to seed the admin from deployment environment variables.
 func (s *Store) EnsureAdmin(ctx context.Context, username, password string) error {

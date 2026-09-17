@@ -57,6 +57,18 @@ func startServer() error {
 		log.Printf("ADMIN_USERNAME/ADMIN_PASSWORD not set — skipping admin seed.")
 	}
 
+	// Seed the default farmer user from environment variables (idempotent).
+	farmerUser := os.Getenv("USER_USERNAME")
+	farmerPass := os.Getenv("USER_PASSWORD")
+	if farmerUser != "" && farmerPass != "" {
+		if err := userStore.EnsureFarmer(context.Background(), farmerUser, farmerPass); err != nil {
+			return err
+		}
+		log.Printf("Farmer user '%s' ensured.", farmerUser)
+	} else {
+		log.Printf("USER_USERNAME/USER_PASSWORD not set — skipping farmer seed.")
+	}
+
 	mux, err := setUpRoutes(gormDB, tokens, userStore)
 	if err != nil {
 		return err
