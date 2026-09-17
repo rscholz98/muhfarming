@@ -86,3 +86,34 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// seedRegions is the canonical list of Cameroon's 10 regions, in the order they
+// are seeded. On a fresh database this assigns Adamawa=1, Centre=2, ... West=10.
+var seedRegions = []Region{
+	{Name: "Adamawa", GeoCode: "AD"},
+	{Name: "Centre", GeoCode: "CE"},
+	{Name: "East", GeoCode: "ES"},
+	{Name: "Extreme North", GeoCode: "EN"},
+	{Name: "Littoral", GeoCode: "LT"},
+	{Name: "North", GeoCode: "NO"},
+	{Name: "Northwest", GeoCode: "NW"},
+	{Name: "South", GeoCode: "SU"},
+	{Name: "Southwest", GeoCode: "SW"},
+	{Name: "West", GeoCode: "OU"},
+}
+
+// EnsureRegions seeds the 10 Cameroon regions if they do not already exist.
+// Idempotent: each region is matched by name, so repeated calls (across
+// restarts) never create duplicates.
+func (s *Store) EnsureRegions(ctx context.Context) error {
+	for _, r := range seedRegions {
+		var existing Region
+		if err := s.db.WithContext(ctx).
+			Where(Region{Name: r.Name}).
+			Attrs(Region{GeoCode: r.GeoCode}).
+			FirstOrCreate(&existing).Error; err != nil {
+			return fmt.Errorf("seed region %q: %w", r.Name, err)
+		}
+	}
+	return nil
+}

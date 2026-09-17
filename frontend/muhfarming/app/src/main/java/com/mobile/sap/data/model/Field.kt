@@ -41,7 +41,9 @@ enum class CultivationRisk {
 
 data class Field(
     val id: String,
+    val name: String = "Field",
     val region: String,
+    val farmId: Long = 0,
     val coordinates: List<Coordinate>,
     val incidents: List<Incident> = emptyList(),
     val hazards: List<Hazard> = emptyList(),

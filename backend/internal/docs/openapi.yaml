@@ -455,6 +455,10 @@ paths:
     delete:
       tags: [Fields]
       summary: Delete a field (soft delete)
+      description: >
+        Soft-deletes the field and cascades to its coordinates: all
+        `FieldCoordinate` rows for this field are soft-deleted in the same
+        transaction, so no orphaned coordinates remain.
       operationId: deleteField
       responses:
         "204": { $ref: "#/components/responses/Deleted" }

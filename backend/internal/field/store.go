@@ -3,6 +3,7 @@ package field
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"muhfarming/internal/auth"
 	"muhfarming/internal/scope"
@@ -84,12 +85,23 @@ func (s *Store) Update(ctx context.Context, id int64, req UpdateFieldRequest) (*
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	res := scoped(ctx, s.db.WithContext(ctx)).Delete(&Field{}, id)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	// Soft-delete the field and its coordinates together so we never leave
+	// orphaned FieldCoordinate rows behind. The field package can't import
+	// fieldcoordinate (that package imports this one), so the coordinates are
+	// deleted by table name using GORM's soft-delete convention (deleted_at).
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := scoped(ctx, tx).Delete(&Field{}, id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		if err := tx.Table("field_coordinates").
+			Where("field_id = ? AND deleted_at IS NULL", id).
+			Update("deleted_at", time.Now()).Error; err != nil {
+			return fmt.Errorf("delete field coordinates failed: %w", err)
+		}
+		return nil
+	})
 }

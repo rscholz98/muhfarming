@@ -1,7 +1,6 @@
 package com.mobile.sap.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,14 +14,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mobile.sap.data.model.CurrentWeatherInfo
 import com.mobile.sap.data.model.DailyForecast
 import com.mobile.sap.data.model.HourlyForecast
+import com.mobile.sap.ui.components.BrandHeader
+import com.mobile.sap.ui.components.PrimaryButton
+import com.mobile.sap.ui.components.SectionCard
+import com.mobile.sap.ui.components.SectionLabel
 import com.mobile.sap.ui.theme.*
 import com.mobile.sap.ui.viewmodel.WeatherUiState
 import com.mobile.sap.ui.viewmodel.WeatherViewModel
@@ -44,31 +47,12 @@ fun WeatherScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = currentDayName,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 20.sp,
-                            letterSpacing = 0.sp
-                        )
-                        Text(
-                            text = location,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 13.sp,
-                            letterSpacing = 0.sp,
-                            color = FioriWhite.copy(alpha = 0.85f)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = FioriBlue,
-                    titleContentColor = FioriWhite
-                )
+            BrandHeader(
+                title = currentDayName,
+                subtitle = location
             )
         },
-        containerColor = FioriLightGray
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         when (val state = uiState) {
             is WeatherUiState.Loading -> {
@@ -78,7 +62,7 @@ fun WeatherScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = FioriBlue)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
             is WeatherUiState.Success -> {
@@ -132,7 +116,7 @@ fun WeatherContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        item { Spacer(modifier = Modifier.height(12.dp)) }
+        item { Spacer(modifier = Modifier.height(16.dp)) }
 
         // Day Selection Strip
         item {
@@ -144,7 +128,7 @@ fun WeatherContent(
             )
         }
 
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item { Spacer(modifier = Modifier.height(20.dp)) }
 
         // Current Weather Inline
         if (currentWeather != null && selectedDate == null) {
@@ -154,7 +138,7 @@ fun WeatherContent(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(20.dp)) }
         }
 
         // Selected Day Details (when a day is selected)
@@ -168,27 +152,22 @@ fun WeatherContent(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                item { Spacer(modifier = Modifier.height(20.dp)) }
             }
         }
 
         // Hourly Forecast Section
         if (filteredHourlyForecasts.isNotEmpty()) {
             item {
-                Text(
-                    text = "HOURLY",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = FioriDarkGray.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.padding(start = 18.dp, bottom = 8.dp)
+                SectionLabel(
+                    text = "Hourly",
+                    modifier = Modifier.padding(start = 20.dp, bottom = 10.dp)
                 )
             }
 
             item {
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp)
                 ) {
                     items(filteredHourlyForecasts) { forecast ->
@@ -197,7 +176,7 @@ fun WeatherContent(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(20.dp)) }
         }
     }
 }
@@ -210,9 +189,9 @@ fun DaySelectionStrip(
     onTodaySelected: () -> Unit
 ) {
     LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
-        modifier = Modifier.height(100.dp)
+        modifier = Modifier.height(104.dp)
     ) {
         itemsIndexed(dailyForecasts) { index, forecast ->
             DayCard(
@@ -250,31 +229,31 @@ fun DayCard(
         ""
     }
 
-    Card(
+    val containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+    val mutedColor = if (isSelected) Color.White.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
         modifier = Modifier
-            .width(68.dp)
-            .height(100.dp)
+            .width(70.dp)
+            .height(104.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) FioriBlue else FioriWhite
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = dayName,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = if (isSelected) FioriWhite else FioriBlack,
-                fontSize = 12.sp,
-                letterSpacing = 0.sp
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor
             )
 
             Text(
@@ -287,16 +266,14 @@ fun DayCard(
                 Text(
                     text = highTemp,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isSelected) FioriWhite else FioriBlack,
-                    fontSize = 14.sp
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor
                 )
                 if (dayOfMonth.isNotEmpty()) {
                     Text(
                         text = dayOfMonth,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) FioriWhite.copy(alpha = 0.7f) else FioriDarkGray.copy(alpha = 0.6f),
-                        fontSize = 10.sp
+                        color = mutedColor
                     )
                 }
             }
@@ -309,16 +286,12 @@ fun CurrentWeatherInline(
     current: CurrentWeatherInfo,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    SectionCard(
+        modifier = modifier,
+        contentPadding = PaddingValues(14.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -326,17 +299,16 @@ fun CurrentWeatherInline(
             Column {
                 Text(
                     text = current.temperature,
-                    style = MaterialTheme.typography.displayLarge,
+                    style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Light,
-                    color = FioriBlack,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 56.sp,
                     letterSpacing = (-2).sp
                 )
                 Text(
                     text = current.condition,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = FioriDarkGray,
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Normal
                 )
             }
@@ -344,7 +316,7 @@ fun CurrentWeatherInline(
             // Right: Weather details
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 WeatherDetailRow("💧", "${current.humidity}%")
                 WeatherDetailRow("🌧", current.precipitation)
@@ -364,9 +336,8 @@ fun WeatherDetailRow(icon: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = FioriDarkGray,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Normal
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -377,16 +348,12 @@ fun SelectedDayCard(
     showSoilData: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    SectionCard(
+        modifier = modifier,
+        contentPadding = PaddingValues(14.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -399,13 +366,12 @@ fun SelectedDayCard(
 
             Text(
                 text = forecast.condition,
-                style = MaterialTheme.typography.bodyLarge,
-                color = FioriDarkGray,
-                fontSize = 16.sp,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -414,32 +380,28 @@ fun SelectedDayCard(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = forecast.highTemp,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = FioriBlack,
-                        fontSize = 28.sp
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "High",
                         style = MaterialTheme.typography.labelMedium,
-                        color = FioriDarkGray.copy(alpha = 0.7f),
-                        fontSize = 12.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = forecast.lowTemp,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = FioriBlack,
-                        fontSize = 28.sp
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "Low",
                         style = MaterialTheme.typography.labelMedium,
-                        color = FioriDarkGray.copy(alpha = 0.7f),
-                        fontSize = 12.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -447,25 +409,23 @@ fun SelectedDayCard(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "${forecast.precipitation}%",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = FioriBlue,
-                            fontSize = 28.sp
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Info
                         )
                         Text(
                             text = "Rain",
                             style = MaterialTheme.typography.labelMedium,
-                            color = FioriDarkGray.copy(alpha = 0.7f),
-                            fontSize = 12.sp
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
             if (showSoilData && forecast.soilTemperature != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = FioriGray.copy(alpha = 0.3f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -474,16 +434,14 @@ fun SelectedDayCard(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = forecast.soilTemperature,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = FioriBlack,
-                            fontSize = 18.sp
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Soil Temp",
                             style = MaterialTheme.typography.labelSmall,
-                            color = FioriDarkGray.copy(alpha = 0.7f),
-                            fontSize = 11.sp
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -491,16 +449,14 @@ fun SelectedDayCard(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = forecast.soilMoisture,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = FioriBlack,
-                                fontSize = 18.sp
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Soil Moisture",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = FioriDarkGray.copy(alpha = 0.7f),
-                                fontSize = 11.sp
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -512,13 +468,13 @@ fun SelectedDayCard(
 
 @Composable
 fun HourlyForecastCard(forecast: HourlyForecast, showSoilData: Boolean) {
-    Card(
+    Surface(
         modifier = Modifier
             .width(100.dp)
-            .height(140.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = FioriWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .height(144.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
@@ -530,10 +486,8 @@ fun HourlyForecastCard(forecast: HourlyForecast, showSoilData: Boolean) {
             Text(
                 text = forecast.time,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Normal,
-                color = FioriDarkGray,
-                fontSize = 11.sp,
-                letterSpacing = 0.sp
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Text(
@@ -549,22 +503,21 @@ fun HourlyForecastCard(forecast: HourlyForecast, showSoilData: Boolean) {
                 Text(
                     text = forecast.temperature,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Normal,
-                    color = FioriBlack,
-                    fontSize = 20.sp
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 if (forecast.precipitationProbability != null && forecast.precipitationProbability > 0) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = FioriBlue.copy(alpha = 0.1f)
+                        shape = RoundedCornerShape(6.dp),
+                        color = Info.copy(alpha = 0.10f)
                     ) {
                         Text(
                             text = "${forecast.precipitationProbability}%",
                             style = MaterialTheme.typography.labelSmall,
-                            color = FioriBlue,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            fontWeight = FontWeight.SemiBold,
+                            color = Info,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -573,8 +526,7 @@ fun HourlyForecastCard(forecast: HourlyForecast, showSoilData: Boolean) {
                     Text(
                         text = forecast.soilTemperature,
                         style = MaterialTheme.typography.labelSmall,
-                        color = FioriDarkGray.copy(alpha = 0.7f),
-                        fontSize = 10.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -600,31 +552,25 @@ fun ErrorState(
         ) {
             Text(
                 text = "⚠️",
-                fontSize = 48.sp
+                fontSize = 36.sp
             )
             Text(
                 text = "Unable to Load Weather",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = FioriBlack
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = FioriDarkGray,
-                fontSize = 13.sp
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(
+            PrimaryButton(
+                text = "Retry",
                 onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = FioriBlue),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(
-                    text = "Retry",
-                    fontWeight = FontWeight.Medium
-                )
-            }
+                modifier = Modifier.widthIn(max = 200.dp)
+            )
         }
     }
 }
